@@ -7,10 +7,14 @@ src = ["app", "tests"]
 # Enable/disable specific rules
 lint.select = [
     "E",   # pycodestyle (errors)
+    "W",   # pycodestyle (warnings)
     "F",   # pyflakes
     "I",   # isort (import sorting)
+    "N",   # pep8-naming
     "B",   # flake8-bugbear
     "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific rules
 ]
 lint.ignore = [
     "E501",  # line length (let formatter handle wrapping if added later)
@@ -35,3 +39,11 @@ exclude = [
 [lint.isort]
 combine-as-imports = true
 force-single-line = false
+known-first-party = ["app"]
+
+# Formatting options
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

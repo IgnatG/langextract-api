@@ -12,8 +12,10 @@ Usage — start a worker::
 from celery import Celery
 
 from app.dependencies import get_settings
+from app.logging_config import setup_logging
 
 settings = get_settings()
+setup_logging(level=settings.LOG_LEVEL, json_format=not settings.DEBUG)
 
 celery_app = Celery(
     "langextract-worker",
@@ -27,11 +29,9 @@ celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-
     # Timezone
     timezone="UTC",
     enable_utc=True,
-
     # Reliability
     task_track_started=True,
     task_time_limit=settings.TASK_TIME_LIMIT,
@@ -39,10 +39,8 @@ celery_app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     worker_prefetch_multiplier=1,
-
     # Results
     result_expires=settings.RESULT_EXPIRES,
-
     # Retry policy for broker connection
     broker_connection_retry_on_startup=True,
 )

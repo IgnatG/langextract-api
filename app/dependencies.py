@@ -7,8 +7,8 @@ Celery connectivity.
 """
 
 import logging
+from collections.abc import Generator
 from functools import lru_cache
-from typing import Generator
 
 import redis
 from pydantic import field_validator
@@ -47,9 +47,14 @@ class Settings(BaseSettings):
     # API Keys (populated via .env)
     OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
+    LANGEXTRACT_API_KEY: str = ""
 
-    # Provider defaults (overridable per-request)
-    DEFAULT_PROVIDER: str = "gemini-1.5-pro"
+    # Provider / model defaults (overridable per-request)
+    DEFAULT_PROVIDER: str = "gpt-4o"
+
+    # LangExtract extraction defaults
+    DEFAULT_MAX_WORKERS: int = 10
+    DEFAULT_MAX_CHAR_BUFFER: int = 1000
 
     # Task defaults
     TASK_TIME_LIMIT: int = 3600  # seconds
@@ -68,17 +73,17 @@ class Settings(BaseSettings):
 
     # Derived URLs
     @property
-    def REDIS_URL(self) -> str:
+    def REDIS_URL(self) -> str:  # noqa: N802
         """Full Redis connection URL."""
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     @property
-    def CELERY_BROKER_URL(self) -> str:
+    def CELERY_BROKER_URL(self) -> str:  # noqa: N802
         """Celery broker URL (backed by Redis)."""
         return self.REDIS_URL
 
     @property
-    def CELERY_RESULT_BACKEND(self) -> str:
+    def CELERY_RESULT_BACKEND(self) -> str:  # noqa: N802
         """Celery result backend URL (backed by Redis)."""
         return self.REDIS_URL
 

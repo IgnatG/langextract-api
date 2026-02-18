@@ -5,16 +5,15 @@ All data contracts live here so that ``main.py`` and ``tasks.py``
 can import lightweight schema objects without circular dependencies.
 """
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 
-
 # ── Task state enum ─────────────────────────────────────────────────────────
 
 
-class TaskState(str, Enum):
+class TaskState(StrEnum):
     """Possible states of a Celery task."""
 
     PENDING = "PENDING"
@@ -46,9 +45,10 @@ class ExtractionRequest(BaseModel):
         description="Raw text blob to process directly",
     )
     provider: str = Field(
-        default="gemini-1.5-pro",
+        default="gpt-4o",
         description=(
-            "AI provider / model to use for extraction. "
+            "LLM model ID to use for extraction "
+            "(e.g. 'gpt-4o', 'gpt-4o'). "
             "Can override the DEFAULT_PROVIDER env var per-request."
         ),
     )
@@ -68,7 +68,13 @@ class ExtractionRequest(BaseModel):
     )
     extraction_config: dict[str, Any] = Field(
         default_factory=dict,
-        description="Optional extraction configuration overrides",
+        description=(
+            "Optional LangExtract configuration overrides. "
+            "Accepted keys: prompt_description (str), "
+            "examples (list[dict]), max_workers (int), "
+            "max_char_buffer (int), additional_context (str), "
+            "temperature (float), context_window_chars (int)."
+        ),
     )
 
     @model_validator(mode="after")
@@ -76,7 +82,7 @@ class ExtractionRequest(BaseModel):
         """Ensure the caller provides a document URL or raw text."""
         if not self.document_url and not self.raw_text:
             raise ValueError(
-                "At least one of 'document_url' or 'raw_text' " "must be provided."
+                "At least one of 'document_url' or 'raw_text' must be provided."
             )
         return self
 
@@ -168,21 +174,27 @@ class TaskRevokeResponse(BaseModel):
 
 
 class ExtractedEntity(BaseModel):
-    """A single entity extracted from the document."""
+    """A single entity extracted from the document by LangExtract."""
 
-    type: str = Field(
+    extraction_class: str = Field(
         ...,
-        description="Entity type (e.g. Company, Date, Amount)",
+        description="Entity class (e.g. party, date, monetary_amount)",
     )
-    value: str = Field(
+    extraction_text: str = Field(
         ...,
-        description="Extracted value",
+        description="Exact text extracted from the source document",
     )
-    confidence: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Model confidence score (0-1)",
+    attributes: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Key-value attributes providing context",
+    )
+    char_start: int | None = Field(
+        default=None,
+        description="Start character offset in the source text",
+    )
+    char_end: int | None = Field(
+        default=None,
+        description="End character offset in the source text",
     )
 
 

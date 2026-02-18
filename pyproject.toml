@@ -12,7 +12,7 @@ dependencies = [
     "redis>=5.0.3,<6.5",
     "httpx>=0.28.1",
     "flower>=2.0.1",
-    # LangExtract — uncomment or replace with your fork
+    "langextract[openai]>=1.1.1",
     # "langextract @ git+https://github.com/your-org/langextract.git@main",
 ]
 
@@ -21,25 +21,16 @@ dev = [
     "httpx>=0.28.1",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
+    "pytest-cov>=6.0",
     "ruff>=0.13.0",
 ]
 
-[tool.ruff]
-line-length = 79
-target-version = "py312"
-
-[tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "N",   # pep8-naming
-    "UP",  # pyupgrade
-    "B",   # flake8-bugbear
-    "SIM", # flake8-simplify
-]
+# Ruff config lives in .ruff.toml (single source of truth)
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+]

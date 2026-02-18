@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.dependencies import get_settings
+from app.logging_config import setup_logging
 from app.schemas import (
     BatchExtractionRequest,
     CeleryHealthResponse,
@@ -34,11 +35,7 @@ from app.worker import celery_app
 # ── Logging ─────────────────────────────────────────────────────────────────
 
 settings = get_settings()
-
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-)
+setup_logging(level=settings.LOG_LEVEL, json_format=not settings.DEBUG)
 logger = logging.getLogger(__name__)
 
 
