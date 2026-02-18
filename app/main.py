@@ -6,12 +6,18 @@ and versioned API routers.  Route handlers live in ``app.routers.*``.
 """
 
 import logging
+import time
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import (
+    BaseHTTPMiddleware,
+    RequestResponseEndpoint,
+)
 
-from app.dependencies import get_settings
+from app.dependencies import get_settings, get_version
 from app.logging_config import setup_logging
 from app.routers import extraction, health, tasks
 
@@ -22,7 +28,50 @@ setup_logging(level=settings.LOG_LEVEL, json_format=not settings.DEBUG)
 logger = logging.getLogger(__name__)
 
 
+# ── Request-ID middleware ───────────────────────────────────────────────────
+
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Inject a unique ``X-Request-ID`` into every request/response.
+
+    If the client provides an ``X-Request-ID`` header it is reused;
+    otherwise a new UUID-4 is generated.  The value is stored on
+    ``request.state.request_id`` for downstream handlers and logged
+    with every request.
+    """
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
+        """Process the request, attaching a request ID."""
+        request_id = request.headers.get(
+            "x-request-id",
+            str(uuid.uuid4()),
+        )
+        request.state.request_id = request_id
+
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+
+        response.headers["X-Request-ID"] = request_id
+
+        logger.info(
+            "%s %s %d %.1fms [rid=%s]",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+            request_id,
+        )
+        return response
+
+
 # ── Lifespan ────────────────────────────────────────────────────────────────
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Application startup / shutdown hooks."""
@@ -32,13 +81,16 @@ async def lifespan(_app: FastAPI):
 
 
 # ── App factory ─────────────────────────────────────────────────────────────
+
+_version = get_version()
+
 app = FastAPI(
     title=settings.APP_NAME,
     description=(
         "Queue-based document extraction API powered by "
         "FastAPI, Celery, and LangExtract."
     ),
-    version="0.1.0",
+    version=_version,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
@@ -46,6 +98,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Middleware (order matters — outermost first)
+app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,

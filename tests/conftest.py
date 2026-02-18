@@ -60,6 +60,13 @@ def mock_settings():
     settings.TASK_TIME_LIMIT = 3600
     settings.TASK_SOFT_TIME_LIMIT = 3300
     settings.RESULT_EXPIRES = 86400
+    # Security settings
+    settings.ALLOWED_URL_DOMAINS = []
+    settings.WEBHOOK_SECRET = ""
+    settings.DOC_DOWNLOAD_TIMEOUT = 30
+    settings.DOC_DOWNLOAD_MAX_BYTES = 50_000_000
+    # Batch settings
+    settings.BATCH_CONCURRENCY = 4
     return settings
 
 
@@ -102,13 +109,19 @@ def fake_annotated_document() -> FakeAnnotatedDocument:
                 extraction_class="party",
                 extraction_text="Acme Corp",
                 attributes={"role": "Seller"},
-                char_interval=FakeCharInterval(start_pos=14, end_pos=23),
+                char_interval=FakeCharInterval(
+                    start_pos=14,
+                    end_pos=23,
+                ),
             ),
             FakeExtraction(
                 extraction_class="date",
                 extraction_text="January 1, 2025",
                 attributes={"type": "effective_date"},
-                char_interval=FakeCharInterval(start_pos=30, end_pos=45),
+                char_interval=FakeCharInterval(
+                    start_pos=30,
+                    end_pos=45,
+                ),
             ),
         ],
     )
@@ -117,5 +130,8 @@ def fake_annotated_document() -> FakeAnnotatedDocument:
 @pytest.fixture
 def mock_lx_extract(fake_annotated_document):
     """Patch ``lx.extract()`` to return a fake AnnotatedDocument."""
-    with patch("app.tasks.lx.extract", return_value=fake_annotated_document) as m:
+    with patch(
+        "app.tasks.lx.extract",
+        return_value=fake_annotated_document,
+    ) as m:
         yield m

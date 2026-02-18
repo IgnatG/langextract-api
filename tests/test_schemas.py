@@ -2,9 +2,11 @@
 
 Validates:
 - ``ExtractionRequest`` field defaults and validation rules
+- ``ExtractionConfig`` typed model
 - ``BatchExtractionRequest`` structure
 - ``ExtractedEntity`` serialisation
 - ``TaskState`` enum values
+- Provider validation
 """
 
 from __future__ import annotations
@@ -14,7 +16,9 @@ from pydantic import ValidationError
 
 from app.schemas import (
     BatchExtractionRequest,
+    BatchTaskSubmitResponse,
     ExtractedEntity,
+    ExtractionConfig,
     ExtractionMetadata,
     ExtractionRequest,
     ExtractionResult,
@@ -23,6 +27,35 @@ from app.schemas import (
     TaskStatusResponse,
     TaskSubmitResponse,
 )
+
+# ── ExtractionConfig ───────────────────────────────────────────────────────
+
+
+class TestExtractionConfig:
+    """Validation tests for ``ExtractionConfig``."""
+
+    def test_defaults_all_none(self):
+        """Default config has all None values."""
+        cfg = ExtractionConfig()
+        assert cfg.prompt_description is None
+        assert cfg.temperature is None
+
+    def test_to_flat_dict_excludes_none(self):
+        """to_flat_dict only includes non-None values."""
+        cfg = ExtractionConfig(temperature=0.7)
+        flat = cfg.to_flat_dict()
+        assert flat == {"temperature": 0.7}
+
+    def test_temperature_range(self):
+        """Temperature above 2.0 is rejected."""
+        with pytest.raises(ValidationError):
+            ExtractionConfig(temperature=3.0)
+
+    def test_max_workers_range(self):
+        """Max workers above 100 is rejected."""
+        with pytest.raises(ValidationError):
+            ExtractionConfig(max_workers=200)
+
 
 # ── ExtractionRequest ──────────────────────────────────────────────────────
 
@@ -54,8 +87,11 @@ class TestExtractionRequest:
         assert req.raw_text is not None
 
     def test_fails_without_input(self):
-        """A request with neither url nor text raises ValidationError."""
-        with pytest.raises(ValidationError, match=r"(?i)at least one"):
+        """A request with neither url nor text raises."""
+        with pytest.raises(
+            ValidationError,
+            match=r"(?i)at least one",
+        ):
             ExtractionRequest(provider="gpt-4o")
 
     def test_default_provider(self):
@@ -92,15 +128,58 @@ class TestExtractionRequest:
             )
 
     def test_extraction_config_default(self):
-        """Default extraction_config is an empty dict."""
+        """Default extraction_config is an empty ExtractionConfig."""
         req = ExtractionRequest(raw_text="test")
-        assert req.extraction_config == {}
+        assert isinstance(req.extraction_config, ExtractionConfig)
+        assert req.extraction_config.to_flat_dict() == {}
 
     def test_extraction_config_accepts_custom(self):
         """Custom extraction_config is preserved."""
         cfg = {"prompt_description": "Custom", "temperature": 0.5}
-        req = ExtractionRequest(raw_text="test", extraction_config=cfg)
-        assert req.extraction_config == cfg
+        req = ExtractionRequest(
+            raw_text="test",
+            extraction_config=cfg,
+        )
+        assert req.extraction_config.prompt_description == "Custom"
+        assert req.extraction_config.temperature == 0.5
+
+    def test_idempotency_key_accepted(self):
+        """Optional idempotency_key is accepted."""
+        req = ExtractionRequest(
+            raw_text="test",
+            idempotency_key="my-key-123",
+        )
+        assert req.idempotency_key == "my-key-123"
+
+    def test_provider_rejects_bad_chars(self):
+        """Provider with spaces or special chars is rejected."""
+        with pytest.raises(ValidationError):
+            ExtractionRequest(
+                raw_text="test",
+                provider="bad provider!",
+            )
+
+    def test_provider_min_length(self):
+        """Provider with single char is rejected."""
+        with pytest.raises(ValidationError):
+            ExtractionRequest(
+                raw_text="test",
+                provider="x",
+            )
+
+    def test_provider_accepts_valid_ids(self):
+        """Typical model IDs are accepted."""
+        for model_id in [
+            "gpt-4o",
+            "gemini-2.5-flash",
+            "openai/gpt-4o-mini",
+            "claude-3-opus",
+        ]:
+            req = ExtractionRequest(
+                raw_text="test",
+                provider=model_id,
+            )
+            assert req.provider == model_id
 
 
 # ── BatchExtractionRequest ─────────────────────────────────────────────────
@@ -183,7 +262,7 @@ class TestExtractionResult:
             metadata=ExtractionMetadata(provider="gpt-4o"),
         )
         assert result.entities == []
-        assert result.metadata.tokens_used == 0
+        assert result.metadata.tokens_used is None
 
     def test_with_entities(self):
         """Result with entities serialises correctly."""
@@ -203,6 +282,11 @@ class TestExtractionResult:
         d = result.model_dump()
         assert len(d["entities"]) == 1
         assert d["metadata"]["tokens_used"] == 100
+
+    def test_tokens_used_none_by_default(self):
+        """tokens_used defaults to None, not 0."""
+        meta = ExtractionMetadata(provider="gpt-4o")
+        assert meta.tokens_used is None
 
 
 # ── TaskState ──────────────────────────────────────────────────────────────
@@ -241,6 +325,15 @@ class TestResponseModels:
         resp = TaskSubmitResponse(task_id="abc-123")
         assert resp.status == "submitted"
         assert resp.message == "Task submitted successfully"
+
+    def test_batch_task_submit_response(self):
+        """BatchTaskSubmitResponse includes document_task_ids."""
+        resp = BatchTaskSubmitResponse(
+            batch_task_id="btask-1",
+            document_task_ids=["a", "b"],
+        )
+        assert resp.batch_task_id == "btask-1"
+        assert len(resp.document_task_ids) == 2
 
     def test_task_status_response(self):
         """TaskStatusResponse can represent each state."""

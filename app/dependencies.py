@@ -6,6 +6,9 @@ provides FastAPI dependency-injection helpers for Redis and
 Celery connectivity.
 """
 
+from __future__ import annotations
+
+import importlib.metadata
 import logging
 from collections.abc import Generator
 from functools import lru_cache
@@ -15,6 +18,24 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+
+# ── Package version (single source of truth from pyproject.toml) ────────
+
+
+def get_version() -> str:
+    """Return the installed package version.
+
+    Falls back to ``"0.0.0-dev"`` when the package metadata
+    is not available (e.g. during editable / source installs).
+
+    Returns:
+        Semantic version string.
+    """
+    try:
+        return importlib.metadata.version("langextract-api")
+    except importlib.metadata.PackageNotFoundError:
+        return "0.0.0-dev"
 
 
 # ── Settings ────────────────────────────────────────────────────────────────
@@ -61,6 +82,15 @@ class Settings(BaseSettings):
     TASK_SOFT_TIME_LIMIT: int = 3300  # seconds
     RESULT_EXPIRES: int = 86400  # seconds
 
+    # ── Security / SSRF ─────────────────────────────────────────────
+    ALLOWED_URL_DOMAINS: list[str] = []
+    WEBHOOK_SECRET: str = ""
+    DOC_DOWNLOAD_TIMEOUT: int = 30  # seconds
+    DOC_DOWNLOAD_MAX_BYTES: int = 50_000_000  # 50 MB
+
+    # ── Batch concurrency ───────────────────────────────────────────
+    BATCH_CONCURRENCY: int = 4
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _parse_cors(cls, v: str | list[str]) -> list[str]:
@@ -71,11 +101,24 @@ class Settings(BaseSettings):
             return json.loads(v)
         return v
 
+    @field_validator("ALLOWED_URL_DOMAINS", mode="before")
+    @classmethod
+    def _parse_allowed_domains(
+        cls,
+        v: str | list[str],
+    ) -> list[str]:
+        """Accept comma-separated string or a list."""
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            return [d.strip() for d in v.split(",") if d.strip()]
+        return v
+
     # Derived URLs
     @property
     def REDIS_URL(self) -> str:  # noqa: N802
         """Full Redis connection URL."""
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}" f"/{self.REDIS_DB}"
 
     @property
     def CELERY_BROKER_URL(self) -> str:  # noqa: N802
@@ -99,12 +142,33 @@ def get_settings() -> Settings:
     return Settings()
 
 
-# ── Redis client ────────────────────────────────────────────────────────────
+# ── Global Redis connection pool ────────────────────────────────────────────
+
+_redis_pool: redis.ConnectionPool | None = None
+
+
+def _get_redis_pool() -> redis.ConnectionPool:
+    """Return a module-level Redis ``ConnectionPool`` (created once).
+
+    Reusing a single pool avoids the overhead of creating and
+    tearing down connections per request.
+
+    Returns:
+        A shared ``ConnectionPool`` instance.
+    """
+    global _redis_pool  # noqa: PLW0603
+    if _redis_pool is None:
+        settings = get_settings()
+        _redis_pool = redis.ConnectionPool.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+        )
+    return _redis_pool
 
 
 def get_redis() -> Generator[redis.Redis, None, None]:
     """
-    Yield a Redis client for the duration of a request.
+    Yield a Redis client backed by the shared connection pool.
 
     Usage as a FastAPI dependency::
 
@@ -112,13 +176,20 @@ def get_redis() -> Generator[redis.Redis, None, None]:
         def ping(r: redis.Redis = Depends(get_redis)):
             return r.ping()
     """
-    settings = get_settings()
-    pool = redis.ConnectionPool.from_url(
-        settings.REDIS_URL,
-        decode_responses=True,
-    )
-    client = redis.Redis(connection_pool=pool)
+    client = redis.Redis(connection_pool=_get_redis_pool())
     try:
         yield client
     finally:
         client.close()
+
+
+def get_redis_client() -> redis.Redis:
+    """Return a Redis client for non-dependency use (e.g. tasks).
+
+    The caller is responsible for calling ``client.close()``
+    when finished.
+
+    Returns:
+        A ``redis.Redis`` instance on the shared pool.
+    """
+    return redis.Redis(connection_pool=_get_redis_pool())

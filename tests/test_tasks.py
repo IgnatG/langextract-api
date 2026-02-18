@@ -5,8 +5,10 @@ Tests cover:
 - ``_resolve_api_key()`` — API key selection logic
 - ``_is_openai_model()`` — OpenAI model detection
 - ``_convert_extractions()`` — AnnotatedDocument → dict conversion
-- ``_fire_webhook()`` — webhook delivery
-- ``_run_extraction()`` — full extraction pipeline (mocked lx.extract)
+- ``_extract_token_usage()`` — token usage extraction
+- ``_fire_webhook()`` — webhook delivery with HMAC signing
+- ``_run_extraction()`` — full extraction pipeline (mocked)
+- ``extract_document`` / ``extract_batch`` Celery tasks
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ class TestBuildExamples:
     """Tests for the ``_build_examples`` helper."""
 
     def test_converts_single_example(self):
-        """A single example dict is converted to an ExampleData list."""
+        """A single example dict is converted to ExampleData."""
         from app.tasks import _build_examples
 
         raw = [
@@ -53,7 +55,7 @@ class TestBuildExamples:
         assert result[0].extractions[0].extraction_text == "Acme"
 
     def test_converts_multiple_examples(self):
-        """Multiple example dicts produce multiple ExampleData objects."""
+        """Multiple example dicts produce multiple objects."""
         from app.tasks import _build_examples
 
         raw = [
@@ -72,7 +74,7 @@ class TestBuildExamples:
         assert _build_examples([]) == []
 
     def test_missing_extractions_key_defaults_to_empty(self):
-        """If 'extractions' key is absent, default to an empty list."""
+        """If 'extractions' key is absent, default to []."""
         from app.tasks import _build_examples
 
         raw = [{"text": "No extractions key here"}]
@@ -81,7 +83,7 @@ class TestBuildExamples:
         assert result[0].extractions == []
 
     def test_attributes_are_optional(self):
-        """Extraction dicts without 'attributes' should still work."""
+        """Extraction dicts without 'attributes' still work."""
         from app.tasks import _build_examples
 
         raw = [
@@ -105,39 +107,57 @@ class TestBuildExamples:
 class TestResolveApiKey:
     """Tests for the ``_resolve_api_key`` helper."""
 
-    def test_returns_openai_key_for_gpt_models(self, mock_settings):
-        """GPT model names should resolve to OPENAI_API_KEY."""
+    def test_returns_openai_key_for_gpt_models(
+        self,
+        mock_settings,
+    ):
+        """GPT model names resolve to OPENAI_API_KEY."""
         from app.tasks import _resolve_api_key
 
-        with patch("app.tasks.get_settings", return_value=mock_settings):
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
             assert _resolve_api_key("gpt-4o") == "test-openai-key"
             assert _resolve_api_key("GPT-4-turbo") == "test-openai-key"
             assert _resolve_api_key("openai/gpt-4o") == "test-openai-key"
 
-    def test_returns_langextract_key_for_gemini(self, mock_settings):
-        """Gemini models should prefer LANGEXTRACT_API_KEY."""
+    def test_returns_langextract_key_for_gemini(
+        self,
+        mock_settings,
+    ):
+        """Gemini models prefer LANGEXTRACT_API_KEY."""
         from app.tasks import _resolve_api_key
 
         mock_settings.LANGEXTRACT_API_KEY = "lx-key"
-        with patch("app.tasks.get_settings", return_value=mock_settings):
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
             assert _resolve_api_key("gemini-2.5-flash") == "lx-key"
 
     def test_falls_back_to_gemini_key(self, mock_settings):
-        """If no LANGEXTRACT_API_KEY, fall back to GEMINI_API_KEY."""
+        """If no LANGEXTRACT_API_KEY, fall back to GEMINI."""
         from app.tasks import _resolve_api_key
 
         mock_settings.LANGEXTRACT_API_KEY = ""
-        with patch("app.tasks.get_settings", return_value=mock_settings):
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
             assert _resolve_api_key("gemini-2.5-flash") == "test-gemini-key"
 
     def test_returns_none_when_no_keys(self, mock_settings):
-        """If no keys are configured, return None."""
+        """If no keys configured, return None."""
         from app.tasks import _resolve_api_key
 
         mock_settings.LANGEXTRACT_API_KEY = ""
         mock_settings.GEMINI_API_KEY = ""
         mock_settings.OPENAI_API_KEY = ""
-        with patch("app.tasks.get_settings", return_value=mock_settings):
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
             assert _resolve_api_key("gemini-2.5-flash") is None
             assert _resolve_api_key("gpt-4o") is None
 
@@ -177,11 +197,16 @@ class TestIsOpenaiModel:
 class TestConvertExtractions:
     """Tests for the ``_convert_extractions`` helper."""
 
-    def test_converts_annotated_document(self, fake_annotated_document):
-        """A populated AnnotatedDocument produces the expected dicts."""
+    def test_converts_annotated_document(
+        self,
+        fake_annotated_document,
+    ):
+        """A populated AnnotatedDocument produces expected dicts."""
         from app.tasks import _convert_extractions
 
-        entities = _convert_extractions(fake_annotated_document)
+        entities = _convert_extractions(
+            fake_annotated_document,
+        )
 
         assert len(entities) == 2
 
@@ -200,14 +225,20 @@ class TestConvertExtractions:
         """An AnnotatedDocument with no extractions returns []."""
         from app.tasks import _convert_extractions
 
-        empty_doc = FakeAnnotatedDocument(text="nothing", extractions=[])
+        empty_doc = FakeAnnotatedDocument(
+            text="nothing",
+            extractions=[],
+        )
         assert _convert_extractions(empty_doc) == []
 
     def test_handles_none_extractions(self):
         """If extractions is None, return an empty list."""
         from app.tasks import _convert_extractions
 
-        doc = FakeAnnotatedDocument(text="test", extractions=None)
+        doc = FakeAnnotatedDocument(
+            text="test",
+            extractions=None,
+        )
         assert _convert_extractions(doc) == []
 
     def test_handles_missing_char_interval(self):
@@ -247,6 +278,38 @@ class TestConvertExtractions:
         assert entities[0]["attributes"] == {}
 
 
+# ── _extract_token_usage ────────────────────────────────────────────────────
+
+
+class TestExtractTokenUsage:
+    """Tests for the ``_extract_token_usage`` helper."""
+
+    def test_returns_none_for_no_usage(self):
+        """Documents without usage info return None."""
+        from app.tasks import _extract_token_usage
+
+        doc = FakeAnnotatedDocument(text="test")
+        assert _extract_token_usage(doc) is None
+
+    def test_extracts_from_object_attribute(self):
+        """If usage.total_tokens exists, extract it."""
+        from app.tasks import _extract_token_usage
+
+        doc = FakeAnnotatedDocument(text="test")
+        usage = MagicMock()
+        usage.total_tokens = 42
+        doc.usage = usage  # type: ignore[attr-defined]
+        assert _extract_token_usage(doc) == 42
+
+    def test_extracts_from_dict_usage(self):
+        """If usage is a dict with total_tokens, extract it."""
+        from app.tasks import _extract_token_usage
+
+        doc = FakeAnnotatedDocument(text="test")
+        doc.usage = {"total_tokens": 99}  # type: ignore[attr-defined]
+        assert _extract_token_usage(doc) == 99
+
+
 # ── _fire_webhook ───────────────────────────────────────────────────────────
 
 
@@ -254,57 +317,136 @@ class TestFireWebhook:
     """Tests for the ``_fire_webhook`` helper."""
 
     @patch("app.tasks.httpx.Client")
-    def test_successful_delivery(self, mock_client_cls):
+    @patch("app.tasks.validate_url", return_value="ok")
+    @patch("app.tasks.get_settings")
+    def test_successful_delivery(
+        self,
+        mock_gs,
+        mock_validate,
+        mock_client_cls,
+    ):
         """Webhook is delivered via POST with JSON payload."""
         from app.tasks import _fire_webhook
+
+        mock_gs.return_value.WEBHOOK_SECRET = ""
 
         mock_client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_client.post.return_value = mock_resp
         mock_client_cls.return_value.__enter__ = lambda s: mock_client
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-
-        _fire_webhook("https://example.com/hook", {"task_id": "abc"})
-
-        mock_client.post.assert_called_once_with(
-            "https://example.com/hook",
-            json={"task_id": "abc"},
+        mock_client_cls.return_value.__exit__ = MagicMock(
+            return_value=False,
         )
+
+        _fire_webhook(
+            "https://example.com/hook",
+            {"task_id": "abc"},
+        )
+
+        mock_client.post.assert_called_once()
         mock_resp.raise_for_status.assert_called_once()
 
     @patch("app.tasks.httpx.Client")
-    def test_failure_does_not_raise(self, mock_client_cls):
+    @patch("app.tasks.validate_url", return_value="ok")
+    @patch("app.tasks.get_settings")
+    def test_failure_does_not_raise(
+        self,
+        mock_gs,
+        mock_validate,
+        mock_client_cls,
+    ):
         """Webhook failures are logged but never re-raised."""
         from app.tasks import _fire_webhook
 
+        mock_gs.return_value.WEBHOOK_SECRET = ""
+
         mock_client = MagicMock()
-        mock_client.post.side_effect = Exception("Connection refused")
+        mock_client.post.side_effect = Exception(
+            "Connection refused",
+        )
         mock_client_cls.return_value.__enter__ = lambda s: mock_client
-        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value.__exit__ = MagicMock(
+            return_value=False,
+        )
 
         # Should not raise
-        _fire_webhook("https://example.com/hook", {"task_id": "abc"})
+        _fire_webhook(
+            "https://example.com/hook",
+            {"task_id": "abc"},
+        )
+
+    @patch("app.tasks.validate_url")
+    def test_ssrf_blocked_url_is_not_sent(self, mock_validate):
+        """Webhook to SSRF-blocked URL is not delivered."""
+        from app.tasks import _fire_webhook
+
+        mock_validate.side_effect = ValueError("blocked")
+
+        # Should not raise
+        _fire_webhook(
+            "http://127.0.0.1/hook",
+            {"task_id": "abc"},
+        )
+
+    @patch("app.tasks.httpx.Client")
+    @patch("app.tasks.validate_url", return_value="ok")
+    @patch("app.tasks.get_settings")
+    def test_hmac_headers_added_when_secret_set(
+        self,
+        mock_gs,
+        mock_validate,
+        mock_client_cls,
+    ):
+        """HMAC signature headers are added when WEBHOOK_SECRET is set."""
+        from app.tasks import _fire_webhook
+
+        mock_gs.return_value.WEBHOOK_SECRET = "my-secret"
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_client.post.return_value = mock_resp
+        mock_client_cls.return_value.__enter__ = lambda s: mock_client
+        mock_client_cls.return_value.__exit__ = MagicMock(
+            return_value=False,
+        )
+
+        _fire_webhook(
+            "https://example.com/hook",
+            {"task_id": "abc"},
+        )
+
+        call_kwargs = mock_client.post.call_args
+        headers = call_kwargs.kwargs.get(
+            "headers",
+            call_kwargs[1].get("headers", {}),
+        )
+        assert "X-Webhook-Signature" in headers
+        assert "X-Webhook-Timestamp" in headers
 
 
-# ── _run_extraction (integration test with mocked lx.extract) ──────────────
+# ── _run_extraction (integration with mocked lx.extract) ──────────────────
 
 
 class TestRunExtraction:
-    """Integration tests for ``_run_extraction`` with mocked LangExtract."""
+    """Integration tests for ``_run_extraction``."""
 
     def test_returns_completed_result(
         self,
         mock_settings,
         mock_lx_extract,
     ):
-        """Successful extraction returns a result dict with entities."""
+        """Successful extraction returns a result dict."""
         from app.tasks import _run_extraction
 
-        with patch("app.tasks.get_settings", return_value=mock_settings):
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
             result = _run_extraction(
                 task_self=None,
-                raw_text="Agreement by Acme Corp dated January 1, 2025",
+                raw_text=("Agreement by Acme Corp " "dated January 1, 2025"),
                 provider="gpt-4o",
                 passes=1,
             )
@@ -314,6 +456,25 @@ class TestRunExtraction:
         assert len(result["data"]["entities"]) == 2
         assert result["data"]["metadata"]["provider"] == "gpt-4o"
         assert result["data"]["metadata"]["processing_time_ms"] >= 0
+
+    def test_tokens_used_is_none_when_unavailable(
+        self,
+        mock_settings,
+        mock_lx_extract,
+    ):
+        """tokens_used is None when lx result has no usage info."""
+        from app.tasks import _run_extraction
+
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
+            result = _run_extraction(
+                task_self=None,
+                raw_text="test",
+            )
+
+        assert result["data"]["metadata"]["tokens_used"] is None
 
     def test_uses_default_prompt_and_examples(
         self,
@@ -326,7 +487,10 @@ class TestRunExtraction:
         )
         from app.tasks import _run_extraction
 
-        with patch("app.tasks.get_settings", return_value=mock_settings):
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
             _run_extraction(
                 task_self=None,
                 raw_text="some text",
@@ -341,7 +505,7 @@ class TestRunExtraction:
         mock_settings,
         mock_lx_extract,
     ):
-        """Custom prompt, temperature, etc. are forwarded to lx.extract."""
+        """Custom prompt, temp, etc. are forwarded to lx.extract."""
         from app.tasks import _run_extraction
 
         cfg: dict[str, Any] = {
@@ -352,7 +516,10 @@ class TestRunExtraction:
             "max_workers": 5,
         }
 
-        with patch("app.tasks.get_settings", return_value=mock_settings):
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
             _run_extraction(
                 task_self=None,
                 raw_text="test",
@@ -370,10 +537,13 @@ class TestRunExtraction:
         mock_settings,
         mock_lx_extract,
     ):
-        """GPT models get fence_output=True, use_schema_constraints=False."""
+        """GPT models get fence_output=True."""
         from app.tasks import _run_extraction
 
-        with patch("app.tasks.get_settings", return_value=mock_settings):
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
             _run_extraction(
                 task_self=None,
                 raw_text="test",
@@ -392,7 +562,10 @@ class TestRunExtraction:
         """Gemini models do NOT get OpenAI-specific flags."""
         from app.tasks import _run_extraction
 
-        with patch("app.tasks.get_settings", return_value=mock_settings):
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
             _run_extraction(
                 task_self=None,
                 raw_text="test",
@@ -408,10 +581,13 @@ class TestRunExtraction:
         mock_settings,
         mock_lx_extract,
     ):
-        """When document_url is provided, it is used as the input."""
+        """When document_url is provided, it is used as input."""
         from app.tasks import _run_extraction
 
-        with patch("app.tasks.get_settings", return_value=mock_settings):
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
             result = _run_extraction(
                 task_self=None,
                 document_url="https://example.com/doc.pdf",
@@ -431,13 +607,15 @@ class TestRunExtraction:
         from app.tasks import _run_extraction
 
         mock_task = MagicMock()
-        with patch("app.tasks.get_settings", return_value=mock_settings):
+        with patch(
+            "app.tasks.get_settings",
+            return_value=mock_settings,
+        ):
             _run_extraction(
                 task_self=mock_task,
                 raw_text="test",
             )
 
-        # At least 3 progress updates: preparing, extracting, post_processing
         assert mock_task.update_state.call_count >= 3
         steps = [
             c.kwargs["meta"]["step"] for c in mock_task.update_state.call_args_list
@@ -460,39 +638,43 @@ class TestRunExtraction:
             ],
         )
         with (
-            patch("app.tasks.get_settings", return_value=mock_settings),
+            patch(
+                "app.tasks.get_settings",
+                return_value=mock_settings,
+            ),
             patch("app.tasks.lx.extract", return_value=[doc]),
         ):
-            result = _run_extraction(task_self=None, raw_text="test")
+            result = _run_extraction(
+                task_self=None,
+                raw_text="test",
+            )
 
         assert len(result["data"]["entities"]) == 1
 
     def test_handles_empty_list_result(self, mock_settings):
-        """If lx.extract returns an empty list, no entities are extracted."""
+        """If lx.extract returns an empty list, no entities."""
         from app.tasks import _run_extraction
 
         with (
-            patch("app.tasks.get_settings", return_value=mock_settings),
+            patch(
+                "app.tasks.get_settings",
+                return_value=mock_settings,
+            ),
             patch("app.tasks.lx.extract", return_value=[]),
-            patch("app.tasks.lx.data.AnnotatedDocument") as mock_ad,
+            patch(
+                "app.tasks.lx.data.AnnotatedDocument",
+            ) as mock_ad,
         ):
             mock_ad.return_value = FakeAnnotatedDocument()
-            result = _run_extraction(task_self=None, raw_text="test")
+            result = _run_extraction(
+                task_self=None,
+                raw_text="test",
+            )
 
         assert result["data"]["entities"] == []
 
 
 # ── extract_document task ──────────────────────────────────────────────────
-#
-# bind=True Celery tasks inject the task instance as ``self``.  When
-# calling the task directly in tests (``extract_document(...)``), Celery's
-# ``__call__`` pushes a *new* request context, so any ``mock_self`` passed
-# as the first positional arg ends up as ``document_url`` instead.
-#
-# The correct testing approach: push a fake request context with a known
-# ``id``, mock ``_run_extraction`` (already tested above), and call
-# ``task.run(...)`` directly.
-# ────────────────────────────────────────────────────────────────────────────
 
 
 class TestExtractDocumentTask:
@@ -519,6 +701,7 @@ class TestExtractDocumentTask:
                     "app.tasks.get_settings",
                     return_value=mock_settings,
                 ),
+                patch("app.tasks._store_result"),
             ):
                 result = extract_document.run(
                     raw_text="test contract text",
@@ -531,7 +714,7 @@ class TestExtractDocumentTask:
         assert result["status"] == "completed"
 
     def test_fires_webhook_on_success(self, mock_settings):
-        """Webhook is triggered when callback_url is provided."""
+        """Webhook triggered when callback_url is provided."""
         from app.tasks import extract_document
 
         mock_result = {
@@ -547,11 +730,14 @@ class TestExtractDocumentTask:
                     "app.tasks._run_extraction",
                     return_value=mock_result,
                 ),
-                patch("app.tasks._fire_webhook") as mock_webhook,
+                patch(
+                    "app.tasks._fire_webhook",
+                ) as mock_webhook,
+                patch("app.tasks._store_result"),
             ):
                 extract_document.run(
                     raw_text="test",
-                    callback_url="https://hook.example.com/done",
+                    callback_url=("https://hook.example.com/done"),
                 )
         finally:
             extract_document.pop_request()
@@ -560,8 +746,38 @@ class TestExtractDocumentTask:
         webhook_url = mock_webhook.call_args[0][0]
         assert webhook_url == "https://hook.example.com/done"
 
+    def test_stores_result_in_redis(self, mock_settings):
+        """Result is persisted via _store_result."""
+        from app.tasks import extract_document
+
+        mock_result = {
+            "status": "completed",
+            "source": "<raw_text>",
+            "data": {"entities": []},
+        }
+
+        extract_document.push_request(id="task-id-store")
+        try:
+            with (
+                patch(
+                    "app.tasks._run_extraction",
+                    return_value=mock_result,
+                ),
+                patch(
+                    "app.tasks._store_result",
+                ) as mock_store,
+            ):
+                extract_document.run(raw_text="test")
+        finally:
+            extract_document.pop_request()
+
+        mock_store.assert_called_once_with(
+            "task-id-store",
+            mock_result,
+        )
+
     def test_retries_on_failure(self, mock_settings):
-        """The task retries on exception (called_directly → re-raises)."""
+        """The task retries on exception."""
         from app.tasks import extract_document
 
         extract_document.push_request(id="task-id-789")
@@ -608,8 +824,12 @@ class TestExtractBatchTask:
                     return_value=mock_result,
                 ),
                 patch("celery.app.task.Task.update_state"),
+                patch("app.tasks._store_result"),
             ):
-                result = extract_batch.run("batch-001", docs)
+                result = extract_batch.run(
+                    "batch-001",
+                    docs,
+                )
         finally:
             extract_batch.pop_request()
 
@@ -642,12 +862,12 @@ class TestExtractBatchTask:
                 patch(
                     "celery.app.task.Task.update_state",
                 ) as mock_update,
+                patch("app.tasks._store_result"),
             ):
                 extract_batch.run("batch-002", docs)
         finally:
             extract_batch.pop_request()
 
-        # One update_state call per document in the loop
         batch_calls = [
             c
             for c in mock_update.call_args_list
@@ -656,7 +876,7 @@ class TestExtractBatchTask:
         assert len(batch_calls) == 2
 
     def test_handles_partial_failure(self, mock_settings):
-        """Documents that fail are captured in errors, others succeed."""
+        """Documents that fail are captured in errors."""
         from app.tasks import extract_batch
 
         call_count = 0
@@ -686,6 +906,7 @@ class TestExtractBatchTask:
                     side_effect=run_side_effect,
                 ),
                 patch("celery.app.task.Task.update_state"),
+                patch("app.tasks._store_result"),
             ):
                 result = extract_batch.run("batch-003", docs)
         finally:
@@ -714,15 +935,54 @@ class TestExtractBatchTask:
                     return_value=mock_result,
                 ),
                 patch("celery.app.task.Task.update_state"),
-                patch("app.tasks._fire_webhook") as mock_webhook,
+                patch(
+                    "app.tasks._fire_webhook",
+                ) as mock_webhook,
+                patch("app.tasks._store_result"),
             ):
                 extract_batch.run(
                     "batch-004",
                     [{"raw_text": "Doc"}],
-                    callback_url="https://hook.example.com/batch",
+                    callback_url=("https://hook.example.com/batch"),
                 )
         finally:
             extract_batch.pop_request()
 
         mock_webhook.assert_called_once()
         assert mock_webhook.call_args[0][0] == "https://hook.example.com/batch"
+
+    def test_respects_concurrency_parameter(
+        self,
+        mock_settings,
+    ):
+        """Batch accepts a concurrency parameter."""
+        from app.tasks import extract_batch
+
+        mock_result = {
+            "status": "completed",
+            "source": "<raw_text>",
+            "data": {"entities": []},
+        }
+
+        docs = [{"raw_text": f"Doc {i}"} for i in range(6)]
+
+        extract_batch.push_request(id="batch-task-5")
+        try:
+            with (
+                patch(
+                    "app.tasks._run_extraction",
+                    return_value=mock_result,
+                ),
+                patch("celery.app.task.Task.update_state"),
+                patch("app.tasks._store_result"),
+            ):
+                result = extract_batch.run(
+                    "batch-005",
+                    docs,
+                    concurrency=2,
+                )
+        finally:
+            extract_batch.pop_request()
+
+        assert result["total"] == 6
+        assert result["successful"] == 6

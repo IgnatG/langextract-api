@@ -5,11 +5,12 @@ Validates:
 - Environment variable parsing
 - Derived properties (REDIS_URL, CELERY_*)
 - CORS origins parsing
+- New security, batch, and SSRF settings
 """
 
 from __future__ import annotations
 
-from app.dependencies import Settings
+from app.dependencies import Settings, get_version
 
 
 class TestSettingsDefaults:
@@ -63,13 +64,31 @@ class TestSettingsDefaults:
         s = Settings(_env_file=None, REDIS_HOST="localhost")
         assert s.RESULT_EXPIRES == 86400
 
+    def test_ssrf_defaults(self):
+        """Security-related defaults."""
+        s = Settings(_env_file=None, REDIS_HOST="localhost")
+        assert s.ALLOWED_URL_DOMAINS == []
+        assert s.WEBHOOK_SECRET == ""
+        assert s.DOC_DOWNLOAD_TIMEOUT == 30
+        assert s.DOC_DOWNLOAD_MAX_BYTES == 50_000_000
+
+    def test_batch_concurrency_default(self):
+        """Default batch concurrency."""
+        s = Settings(_env_file=None, REDIS_HOST="localhost")
+        assert s.BATCH_CONCURRENCY == 4
+
 
 class TestSettingsDerivedProperties:
     """Test computed properties."""
 
     def test_redis_url(self):
         """REDIS_URL is composed from host, port, db."""
-        s = Settings(_env_file=None, REDIS_HOST="myredis", REDIS_PORT=6380, REDIS_DB=2)
+        s = Settings(
+            _env_file=None,
+            REDIS_HOST="myredis",
+            REDIS_PORT=6380,
+            REDIS_DB=2,
+        )
         assert s.REDIS_URL == "redis://myredis:6380/2"
 
     def test_celery_broker_url(self):
@@ -91,7 +110,7 @@ class TestSettingsCorsParser:
         s = Settings(
             _env_file=None,
             REDIS_HOST="localhost",
-            CORS_ORIGINS='["http://localhost:3000","https://app.example.com"]',
+            CORS_ORIGINS=('["http://localhost:3000",' '"https://app.example.com"]'),
         )
         assert s.CORS_ORIGINS == [
             "http://localhost:3000",
@@ -111,6 +130,41 @@ class TestSettingsCorsParser:
         """Default CORS origins is ["*"]."""
         s = Settings(_env_file=None, REDIS_HOST="localhost")
         assert s.CORS_ORIGINS == ["*"]
+
+
+class TestSettingsAllowedDomains:
+    """Test ALLOWED_URL_DOMAINS parsing."""
+
+    def test_empty_string_gives_empty_list(self):
+        """An empty string produces an empty list."""
+        s = Settings(
+            _env_file=None,
+            REDIS_HOST="localhost",
+            ALLOWED_URL_DOMAINS="",
+        )
+        assert s.ALLOWED_URL_DOMAINS == []
+
+    def test_comma_separated_string(self):
+        """Comma-separated domains are split into a list."""
+        s = Settings(
+            _env_file=None,
+            REDIS_HOST="localhost",
+            ALLOWED_URL_DOMAINS="a.com, b.com , c.com",
+        )
+        assert s.ALLOWED_URL_DOMAINS == [
+            "a.com",
+            "b.com",
+            "c.com",
+        ]
+
+    def test_list_passthrough(self):
+        """A list is accepted as-is."""
+        s = Settings(
+            _env_file=None,
+            REDIS_HOST="localhost",
+            ALLOWED_URL_DOMAINS=["x.com"],
+        )
+        assert s.ALLOWED_URL_DOMAINS == ["x.com"]
 
 
 class TestSettingsApiKeys:
@@ -135,3 +189,13 @@ class TestSettingsApiKeys:
         assert s.OPENAI_API_KEY == "sk-test"
         assert s.GEMINI_API_KEY == "gm-test"
         assert s.LANGEXTRACT_API_KEY == "lx-test"
+
+
+class TestGetVersion:
+    """Test the get_version helper."""
+
+    def test_returns_string(self):
+        """get_version always returns a string."""
+        v = get_version()
+        assert isinstance(v, str)
+        assert len(v) > 0
