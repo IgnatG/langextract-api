@@ -66,7 +66,7 @@ class TestExtractionRequest:
     def test_valid_with_url(self):
         """A request with only document_url is valid."""
         req = ExtractionRequest(
-            document_url="https://example.com/doc.pdf",
+            document_url="https://example.com/doc.txt",
         )
         assert req.document_url is not None
         assert req.raw_text is None
@@ -80,7 +80,7 @@ class TestExtractionRequest:
     def test_valid_with_both_inputs(self):
         """A request with both url and text is valid."""
         req = ExtractionRequest(
-            document_url="https://example.com/doc.pdf",
+            document_url="https://example.com/doc.txt",
             raw_text="Also this text",
         )
         assert req.document_url is not None
@@ -175,7 +175,7 @@ class TestExtractionRequest:
 
     def test_raw_text_size_cap(self):
         """Oversized raw_text is rejected."""
-        from app.schemas.extraction import _MAX_RAW_TEXT_CHARS
+        from app.schemas.requests import _MAX_RAW_TEXT_CHARS
 
         with pytest.raises(
             ValidationError,
@@ -214,6 +214,67 @@ class TestExtractionRequest:
                 provider=model_id,
             )
             assert req.provider == model_id
+
+    def test_rejects_pdf_url(self):
+        """A .pdf document_url is rejected."""
+        with pytest.raises(
+            ValidationError,
+            match=r"(?i)unsupported file type",
+        ):
+            ExtractionRequest(
+                document_url="https://example.com/contract.pdf",
+            )
+
+    def test_rejects_docx_url(self):
+        """A .docx document_url is rejected."""
+        with pytest.raises(
+            ValidationError,
+            match=r"(?i)unsupported file type",
+        ):
+            ExtractionRequest(
+                document_url="https://example.com/file.docx",
+            )
+
+    def test_rejects_image_url(self):
+        """An image document_url is rejected."""
+        with pytest.raises(
+            ValidationError,
+            match=r"(?i)unsupported file type",
+        ):
+            ExtractionRequest(
+                document_url="https://example.com/photo.png",
+            )
+
+    def test_accepts_txt_url(self):
+        """A .txt document_url is accepted."""
+        req = ExtractionRequest(
+            document_url="https://example.com/readme.txt",
+        )
+        assert req.document_url is not None
+
+    def test_accepts_md_url(self):
+        """A .md document_url is accepted."""
+        req = ExtractionRequest(
+            document_url="https://example.com/notes.md",
+        )
+        assert req.document_url is not None
+
+    def test_accepts_url_without_extension(self):
+        """A URL with no file extension is accepted."""
+        req = ExtractionRequest(
+            document_url="https://example.com/api/document",
+        )
+        assert req.document_url is not None
+
+    def test_rejects_pdf_url_with_query_params(self):
+        """A .pdf URL with query params is still rejected."""
+        with pytest.raises(
+            ValidationError,
+            match=r"(?i)unsupported file type",
+        ):
+            ExtractionRequest(
+                document_url=("https://example.com/file.pdf?token=abc"),
+            )
 
 
 # ── BatchExtractionRequest ─────────────────────────────────

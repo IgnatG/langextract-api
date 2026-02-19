@@ -10,21 +10,24 @@ For convenience every public model is re-exported from this
 keeps working.
 """
 
-from app.schemas.extraction import (
+from app.schemas.enums import TaskState
+from app.schemas.health import CeleryHealthResponse, HealthResponse
+from app.schemas.requests import (
     BatchExtractionRequest,
-    BatchTaskSubmitResponse,
-    CeleryHealthResponse,
-    ExtractedEntity,
     ExtractionConfig,
-    ExtractionMetadata,
     ExtractionRequest,
-    ExtractionResult,
-    HealthResponse,
     Provider,
+)
+from app.schemas.responses import (
+    BatchTaskSubmitResponse,
     TaskRevokeResponse,
-    TaskState,
     TaskStatusResponse,
     TaskSubmitResponse,
+)
+from app.schemas.results import (
+    ExtractedEntity,
+    ExtractionMetadata,
+    ExtractionResult,
 )
 
 __all__ = [

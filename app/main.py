@@ -20,7 +20,7 @@ from starlette.middleware.base import (
     RequestResponseEndpoint,
 )
 
-from app.api.routes import extraction, health, tasks
+from app.api.routes import batch, extract, health, tasks
 from app.core.config import get_settings, get_version
 from app.core.logging import setup_logging
 
@@ -117,5 +117,6 @@ app.add_middleware(
 
 # ── Register routers ───────────────────────────────────────────────────────
 app.include_router(health.router, prefix=settings.API_V1_STR)
-app.include_router(extraction.router, prefix=settings.API_V1_STR)
+app.include_router(extract.router, prefix=settings.API_V1_STR)
+app.include_router(batch.router, prefix=settings.API_V1_STR)
 app.include_router(tasks.router, prefix=settings.API_V1_STR)

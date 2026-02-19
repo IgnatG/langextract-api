@@ -8,8 +8,8 @@ import logging
 from celery.result import AsyncResult
 from fastapi import APIRouter
 
-from app.core.config import get_redis_client
 from app.core.constants import REDIS_PREFIX_TASK_RESULT, STATUS_REVOKED
+from app.core.redis import get_redis_client
 from app.schemas import (
     TaskRevokeResponse,
     TaskState,

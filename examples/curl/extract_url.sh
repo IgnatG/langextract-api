@@ -9,7 +9,7 @@ API_BASE="${API_BASE:-http://localhost:8000/api/v1}"
 curl -s -X POST "${API_BASE}/extract" \
   -H "Content-Type: application/json" \
   -d '{
-    "document_url": "https://example.com/contract.pdf",
+    "document_url": "https://example.com/contract.txt",
     "provider": "gpt-4o",
     "passes": 2,
     "extraction_config": {

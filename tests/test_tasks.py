@@ -1,11 +1,11 @@
 """Unit tests for task helpers and integration tests for extraction tasks.
 
 Tests cover:
-- ``_build_examples()`` — dict → ExampleData conversion
-- ``_resolve_api_key()`` — API key selection logic
-- ``_is_openai_model()`` — OpenAI model detection
-- ``_convert_extractions()`` — AnnotatedDocument → dict conversion
-- ``_extract_token_usage()`` — token usage extraction
+- ``build_examples()`` — dict → ExampleData conversion
+- ``resolve_api_key()`` — API key selection logic
+- ``is_openai_model()`` — OpenAI model detection
+- ``convert_extractions()`` — AnnotatedDocument → dict conversion
+- ``extract_token_usage()`` — token usage extraction
 - ``fire_webhook()`` — webhook delivery with HMAC signing
 - ``run_extraction()`` — full extraction pipeline (mocked)
 - ``extract_document`` / ``finalize_batch`` Celery tasks
@@ -24,15 +24,15 @@ from tests.conftest import (
     FakeExtraction,
 )
 
-# ── _build_examples ─────────────────────────────────────────
+# ── build_examples ─────────────────────────────────────────
 
 
 class TestBuildExamples:
-    """Tests for the ``_build_examples`` helper."""
+    """Tests for the ``build_examples`` helper."""
 
     def test_converts_single_example(self):
         """A single example dict is converted to ExampleData."""
-        from app.services.extractor import _build_examples
+        from app.services.converters import build_examples
 
         raw = [
             {
@@ -46,7 +46,7 @@ class TestBuildExamples:
                 ],
             },
         ]
-        result = _build_examples(raw)
+        result = build_examples(raw)
 
         assert len(result) == 1
         assert result[0].text == "Contract text here"
@@ -56,35 +56,35 @@ class TestBuildExamples:
 
     def test_converts_multiple_examples(self):
         """Multiple example dicts produce multiple objects."""
-        from app.services.extractor import _build_examples
+        from app.services.converters import build_examples
 
         raw = [
             {"text": "First", "extractions": []},
             {"text": "Second", "extractions": []},
         ]
-        result = _build_examples(raw)
+        result = build_examples(raw)
         assert len(result) == 2
         assert result[0].text == "First"
         assert result[1].text == "Second"
 
     def test_empty_list_returns_empty(self):
         """An empty input list returns an empty output list."""
-        from app.services.extractor import _build_examples
+        from app.services.converters import build_examples
 
-        assert _build_examples([]) == []
+        assert build_examples([]) == []
 
     def test_missing_extractions_key_defaults_to_empty(self):
         """If 'extractions' key is absent, default to []."""
-        from app.services.extractor import _build_examples
+        from app.services.converters import build_examples
 
         raw = [{"text": "No extractions key here"}]
-        result = _build_examples(raw)
+        result = build_examples(raw)
         assert len(result) == 1
         assert result[0].extractions == []
 
     def test_attributes_are_optional(self):
         """Extraction dicts without 'attributes' still work."""
-        from app.services.extractor import _build_examples
+        from app.services.converters import build_examples
 
         raw = [
             {
@@ -97,122 +97,122 @@ class TestBuildExamples:
                 ],
             },
         ]
-        result = _build_examples(raw)
+        result = build_examples(raw)
         assert result[0].extractions[0].attributes is None
 
 
-# ── _resolve_api_key ────────────────────────────────────────
+# ── resolve_api_key ────────────────────────────────────────
 
 
 class TestResolveApiKey:
-    """Tests for the ``_resolve_api_key`` helper."""
+    """Tests for the ``resolve_api_key`` helper."""
 
     def test_returns_openai_key_for_gpt_models(
         self,
         mock_settings,
     ):
         """GPT model names resolve to OPENAI_API_KEY."""
-        from app.services.extractor import _resolve_api_key
+        from app.services.providers import resolve_api_key
 
         with patch(
-            "app.services.extractor.get_settings",
+            "app.services.providers.get_settings",
             return_value=mock_settings,
         ):
-            assert _resolve_api_key("gpt-4o") == "test-openai-key"
-            assert _resolve_api_key("GPT-4-turbo") == "test-openai-key"
-            assert _resolve_api_key("openai/gpt-4o") == "test-openai-key"
+            assert resolve_api_key("gpt-4o") == "test-openai-key"
+            assert resolve_api_key("GPT-4-turbo") == "test-openai-key"
+            assert resolve_api_key("openai/gpt-4o") == "test-openai-key"
 
     def test_returns_langextract_key_for_gemini(
         self,
         mock_settings,
     ):
         """Gemini models prefer LANGEXTRACT_API_KEY."""
-        from app.services.extractor import _resolve_api_key
+        from app.services.providers import resolve_api_key
 
         mock_settings.LANGEXTRACT_API_KEY = "lx-key"
         with patch(
-            "app.services.extractor.get_settings",
+            "app.services.providers.get_settings",
             return_value=mock_settings,
         ):
-            assert _resolve_api_key("gemini-2.5-flash") == "lx-key"
+            assert resolve_api_key("gemini-2.5-flash") == "lx-key"
 
     def test_falls_back_to_gemini_key(
         self,
         mock_settings,
     ):
         """If no LANGEXTRACT_API_KEY, fall back to GEMINI."""
-        from app.services.extractor import _resolve_api_key
+        from app.services.providers import resolve_api_key
 
         mock_settings.LANGEXTRACT_API_KEY = ""
         with patch(
-            "app.services.extractor.get_settings",
+            "app.services.providers.get_settings",
             return_value=mock_settings,
         ):
-            assert _resolve_api_key("gemini-2.5-flash") == "test-gemini-key"
+            assert resolve_api_key("gemini-2.5-flash") == "test-gemini-key"
 
     def test_returns_none_when_no_keys(
         self,
         mock_settings,
     ):
         """If no keys configured, return None."""
-        from app.services.extractor import _resolve_api_key
+        from app.services.providers import resolve_api_key
 
         mock_settings.LANGEXTRACT_API_KEY = ""
         mock_settings.GEMINI_API_KEY = ""
         mock_settings.OPENAI_API_KEY = ""
         with patch(
-            "app.services.extractor.get_settings",
+            "app.services.providers.get_settings",
             return_value=mock_settings,
         ):
-            assert _resolve_api_key("gemini-2.5-flash") is None
-            assert _resolve_api_key("gpt-4o") is None
+            assert resolve_api_key("gemini-2.5-flash") is None
+            assert resolve_api_key("gpt-4o") is None
 
 
-# ── _is_openai_model ────────────────────────────────────────
+# ── is_openai_model ────────────────────────────────────────
 
 
 class TestIsOpenaiModel:
-    """Tests for the ``_is_openai_model`` helper."""
+    """Tests for the ``is_openai_model`` helper."""
 
     def test_detects_gpt_models(self):
         """Model IDs containing 'gpt' are OpenAI."""
-        from app.services.extractor import _is_openai_model
+        from app.services.providers import is_openai_model
 
-        assert _is_openai_model("gpt-4o") is True
-        assert _is_openai_model("GPT-4-turbo") is True
-        assert _is_openai_model("gpt-4o-mini") is True
+        assert is_openai_model("gpt-4o") is True
+        assert is_openai_model("GPT-4-turbo") is True
+        assert is_openai_model("gpt-4o-mini") is True
 
     def test_detects_openai_prefix(self):
         """Model IDs containing 'openai' are OpenAI."""
-        from app.services.extractor import _is_openai_model
+        from app.services.providers import is_openai_model
 
-        assert _is_openai_model("openai/gpt-4o") is True
+        assert is_openai_model("openai/gpt-4o") is True
 
     def test_rejects_non_openai_models(self):
         """Gemini and other models are not OpenAI."""
-        from app.services.extractor import _is_openai_model
+        from app.services.providers import is_openai_model
 
-        assert _is_openai_model("gemini-2.5-flash") is False
-        assert _is_openai_model("claude-3-opus") is False
-        assert _is_openai_model("llama-3") is False
+        assert is_openai_model("gemini-2.5-flash") is False
+        assert is_openai_model("claude-3-opus") is False
+        assert is_openai_model("llama-3") is False
 
 
-# ── _convert_extractions ────────────────────────────────────
+# ── convert_extractions ────────────────────────────────────
 
 
 class TestConvertExtractions:
-    """Tests for the ``_convert_extractions`` helper."""
+    """Tests for the ``convert_extractions`` helper."""
 
     def test_converts_annotated_document(
         self,
         fake_annotated_document,
     ):
         """A populated AnnotatedDocument produces expected dicts."""
-        from app.services.extractor import (
-            _convert_extractions,
+        from app.services.converters import (
+            convert_extractions,
         )
 
-        entities = _convert_extractions(
+        entities = convert_extractions(
             fake_annotated_document,
         )
 
@@ -231,32 +231,32 @@ class TestConvertExtractions:
 
     def test_empty_document_returns_empty_list(self):
         """An AnnotatedDocument with no extractions returns []."""
-        from app.services.extractor import (
-            _convert_extractions,
+        from app.services.converters import (
+            convert_extractions,
         )
 
         empty_doc = FakeAnnotatedDocument(
             text="nothing",
             extractions=[],
         )
-        assert _convert_extractions(empty_doc) == []
+        assert convert_extractions(empty_doc) == []
 
     def test_handles_none_extractions(self):
         """If extractions is None, return an empty list."""
-        from app.services.extractor import (
-            _convert_extractions,
+        from app.services.converters import (
+            convert_extractions,
         )
 
         doc = FakeAnnotatedDocument(
             text="test",
             extractions=None,
         )
-        assert _convert_extractions(doc) == []
+        assert convert_extractions(doc) == []
 
     def test_handles_missing_char_interval(self):
         """Extractions without char_interval get None offsets."""
-        from app.services.extractor import (
-            _convert_extractions,
+        from app.services.converters import (
+            convert_extractions,
         )
 
         doc = FakeAnnotatedDocument(
@@ -269,14 +269,14 @@ class TestConvertExtractions:
                 ),
             ],
         )
-        entities = _convert_extractions(doc)
+        entities = convert_extractions(doc)
         assert entities[0]["char_start"] is None
         assert entities[0]["char_end"] is None
 
     def test_handles_none_attributes(self):
         """Extractions with attributes=None get an empty dict."""
-        from app.services.extractor import (
-            _convert_extractions,
+        from app.services.converters import (
+            convert_extractions,
         )
 
         doc = FakeAnnotatedDocument(
@@ -290,48 +290,48 @@ class TestConvertExtractions:
                 ),
             ],
         )
-        entities = _convert_extractions(doc)
+        entities = convert_extractions(doc)
         assert entities[0]["attributes"] == {}
 
 
-# ── _extract_token_usage ────────────────────────────────────
+# ── extract_token_usage ────────────────────────────────────
 
 
 class TestExtractTokenUsage:
-    """Tests for the ``_extract_token_usage`` helper."""
+    """Tests for the ``extract_token_usage`` helper."""
 
     def test_returns_none_for_no_usage(self):
         """Documents without usage info return None."""
-        from app.services.extractor import (
-            _extract_token_usage,
+        from app.services.converters import (
+            extract_token_usage,
         )
 
         doc = FakeAnnotatedDocument(text="test")
-        assert _extract_token_usage(doc) is None
+        assert extract_token_usage(doc) is None
 
     def test_extracts_from_object_attribute(self):
         """If usage.total_tokens exists, extract it."""
-        from app.services.extractor import (
-            _extract_token_usage,
+        from app.services.converters import (
+            extract_token_usage,
         )
 
         doc = FakeAnnotatedDocument(text="test")
         usage = MagicMock()
         usage.total_tokens = 42
         doc.usage = usage  # type: ignore[attr-defined]
-        assert _extract_token_usage(doc) == 42
+        assert extract_token_usage(doc) == 42
 
     def test_extracts_from_dict_usage(self):
         """If usage is a dict with total_tokens, extract it."""
-        from app.services.extractor import (
-            _extract_token_usage,
+        from app.services.converters import (
+            extract_token_usage,
         )
 
         doc = FakeAnnotatedDocument(text="test")
         doc.usage = {  # type: ignore[attr-defined]
             "total_tokens": 99,
         }
-        assert _extract_token_usage(doc) == 99
+        assert extract_token_usage(doc) == 99
 
 
 # ── fire_webhook ────────────────────────────────────────────
@@ -517,7 +517,7 @@ class TestRunExtraction:
         from app.services.extractor import run_extraction
 
         with patch(
-            "app.services.extractor.get_settings",
+            "app.services.providers.get_settings",
             return_value=mock_settings,
         ):
             result = run_extraction(
@@ -542,7 +542,7 @@ class TestRunExtraction:
         from app.services.extractor import run_extraction
 
         with patch(
-            "app.services.extractor.get_settings",
+            "app.services.providers.get_settings",
             return_value=mock_settings,
         ):
             result = run_extraction(
@@ -564,7 +564,7 @@ class TestRunExtraction:
         from app.services.extractor import run_extraction
 
         with patch(
-            "app.services.extractor.get_settings",
+            "app.services.providers.get_settings",
             return_value=mock_settings,
         ):
             run_extraction(
@@ -595,7 +595,7 @@ class TestRunExtraction:
         }
 
         with patch(
-            "app.services.extractor.get_settings",
+            "app.services.providers.get_settings",
             return_value=mock_settings,
         ):
             run_extraction(
@@ -619,7 +619,7 @@ class TestRunExtraction:
         from app.services.extractor import run_extraction
 
         with patch(
-            "app.services.extractor.get_settings",
+            "app.services.providers.get_settings",
             return_value=mock_settings,
         ):
             run_extraction(
@@ -641,7 +641,7 @@ class TestRunExtraction:
         from app.services.extractor import run_extraction
 
         with patch(
-            "app.services.extractor.get_settings",
+            "app.services.providers.get_settings",
             return_value=mock_settings,
         ):
             run_extraction(
@@ -664,7 +664,7 @@ class TestRunExtraction:
 
         with (
             patch(
-                "app.services.extractor.get_settings",
+                "app.services.providers.get_settings",
                 return_value=mock_settings,
             ),
             patch(
@@ -678,13 +678,13 @@ class TestRunExtraction:
         ):
             result = run_extraction(
                 task_self=None,
-                document_url=("https://example.com/doc.pdf"),
+                document_url=("https://example.com/doc.txt"),
                 raw_text="fallback text",
             )
 
         call_kwargs = mock_lx_extract.call_args.kwargs
         assert call_kwargs["text_or_documents"] == "downloaded content"
-        assert result["source"] == "https://example.com/doc.pdf"
+        assert result["source"] == "https://example.com/doc.txt"
 
     def test_progress_updates_with_task_self(
         self,
@@ -696,7 +696,7 @@ class TestRunExtraction:
 
         mock_task = MagicMock()
         with patch(
-            "app.services.extractor.get_settings",
+            "app.services.providers.get_settings",
             return_value=mock_settings,
         ):
             run_extraction(
@@ -730,7 +730,7 @@ class TestRunExtraction:
         )
         with (
             patch(
-                "app.services.extractor.get_settings",
+                "app.services.providers.get_settings",
                 return_value=mock_settings,
             ),
             patch(
@@ -754,7 +754,7 @@ class TestRunExtraction:
 
         with (
             patch(
-                "app.services.extractor.get_settings",
+                "app.services.providers.get_settings",
                 return_value=mock_settings,
             ),
             patch(
@@ -793,7 +793,7 @@ class TestExtractDocumentTask:
         extract_document.push_request(id="task-id-123")
         try:
             with patch(
-                "app.workers.tasks.run_extraction",
+                "app.workers.extract_task.run_extraction",
                 return_value=mock_result,
             ) as mock_run:
                 result = extract_document.run(
@@ -823,11 +823,11 @@ class TestExtractDocumentTask:
         try:
             with (
                 patch(
-                    "app.workers.tasks.run_extraction",
+                    "app.workers.extract_task.run_extraction",
                     return_value=mock_result,
                 ),
                 patch(
-                    "app.workers.tasks.fire_webhook",
+                    "app.workers.extract_task.fire_webhook",
                 ) as mock_webhook,
             ):
                 extract_document.run(
@@ -849,7 +849,7 @@ class TestExtractDocumentTask:
         try:
             with (
                 patch(
-                    "app.workers.tasks.run_extraction",
+                    "app.workers.extract_task.run_extraction",
                     side_effect=RuntimeError("API error"),
                 ),
                 pytest.raises(
@@ -875,11 +875,11 @@ class TestExtractDocumentTask:
         try:
             with (
                 patch(
-                    "app.workers.tasks.run_extraction",
+                    "app.workers.extract_task.run_extraction",
                     side_effect=RuntimeError("API error"),
                 ),
                 patch(
-                    "app.workers.tasks.record_task_completed",
+                    "app.workers.extract_task.record_task_completed",
                 ) as mock_metric,
                 pytest.raises(RuntimeError),
             ):
@@ -904,11 +904,11 @@ class TestExtractDocumentTask:
         try:
             with (
                 patch(
-                    "app.workers.tasks.run_extraction",
+                    "app.workers.extract_task.run_extraction",
                     side_effect=RuntimeError("final"),
                 ),
                 patch(
-                    "app.workers.tasks.record_task_completed",
+                    "app.workers.extract_task.record_task_completed",
                 ) as mock_metric,
                 pytest.raises(RuntimeError),
             ):
@@ -934,11 +934,11 @@ class TestExtractDocumentTask:
         try:
             with (
                 patch(
-                    "app.workers.tasks.run_extraction",
+                    "app.workers.extract_task.run_extraction",
                     return_value=mock_result,
                 ),
                 patch(
-                    "app.workers.tasks._store_result_in_redis",
+                    "app.workers.extract_task._store_result_in_redis",
                 ) as mock_store,
             ):
                 extract_document.run(raw_text="test")
@@ -968,11 +968,11 @@ class TestExtractDocumentTask:
         try:
             with (
                 patch(
-                    "app.workers.tasks.run_extraction",
+                    "app.workers.extract_task.run_extraction",
                     return_value=mock_result,
                 ),
                 patch(
-                    "app.workers.tasks.fire_webhook",
+                    "app.workers.extract_task.fire_webhook",
                 ) as mock_wh,
             ):
                 extract_document.run(
@@ -1049,7 +1049,7 @@ class TestFinalizeBatchTask:
         try:
             with (
                 patch(
-                    "app.workers.tasks.AsyncResult",
+                    "app.workers.batch_task.AsyncResult",
                     side_effect=children,
                 ),
                 patch(
@@ -1107,7 +1107,7 @@ class TestFinalizeBatchTask:
         try:
             with (
                 patch(
-                    "app.workers.tasks.AsyncResult",
+                    "app.workers.batch_task.AsyncResult",
                     side_effect=children,
                 ),
                 patch(
@@ -1144,14 +1144,14 @@ class TestFinalizeBatchTask:
         try:
             with (
                 patch(
-                    "app.workers.tasks.AsyncResult",
+                    "app.workers.batch_task.AsyncResult",
                     side_effect=children,
                 ),
                 patch(
                     "celery.app.task.Task.update_state",
                 ),
                 patch(
-                    "app.workers.tasks.fire_webhook",
+                    "app.workers.batch_task.fire_webhook",
                 ) as mock_webhook,
             ):
                 finalize_batch.run(
@@ -1185,7 +1185,7 @@ class TestFinalizeBatchTask:
         try:
             with (
                 patch(
-                    "app.workers.tasks.AsyncResult",
+                    "app.workers.batch_task.AsyncResult",
                     side_effect=children,
                 ),
                 patch(
@@ -1228,7 +1228,7 @@ class TestFinalizeBatchTask:
         try:
             with (
                 patch(
-                    "app.workers.tasks.AsyncResult",
+                    "app.workers.batch_task.AsyncResult",
                     return_value=pending,
                 ),
                 patch(

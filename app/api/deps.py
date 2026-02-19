@@ -11,7 +11,7 @@ from collections.abc import Generator
 
 import redis
 
-from app.core.config import get_redis_pool
+from app.core.redis import get_redis_pool
 
 
 def get_redis() -> Generator[redis.Redis, None, None]:

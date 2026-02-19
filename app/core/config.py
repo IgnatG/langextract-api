@@ -1,10 +1,10 @@
 """
-Provider singletons, configuration, and session management.
+Application configuration and settings.
 
 Centralises all external configuration (env-vars / .env) and
-provides helpers for Redis connectivity and version discovery.
-FastAPI-specific dependency injection (``Depends(get_redis)``) lives
-in ``app.api.deps`` to keep this module framework-agnostic.
+version discovery.  Redis connectivity lives in
+``app.core.redis`` and FastAPI dependency injection in
+``app.api.deps``.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ import importlib.metadata
 import logging
 from functools import lru_cache
 
-import redis
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -139,40 +138,3 @@ def get_settings() -> Settings:
     once.  Override in tests via ``app.dependency_overrides``.
     """
     return Settings()
-
-
-# ── Global Redis connection pool ────────────────────────────────────────────
-
-_redis_pool: redis.ConnectionPool | None = None
-
-
-def get_redis_pool() -> redis.ConnectionPool:
-    """Return a module-level Redis ``ConnectionPool`` (created once).
-
-    Reusing a single pool avoids the overhead of creating and
-    tearing down connections per request.
-
-    Returns:
-        A shared ``ConnectionPool`` instance.
-    """
-    global _redis_pool
-    if _redis_pool is None:
-        settings = get_settings()
-        _redis_pool = redis.ConnectionPool.from_url(
-            settings.REDIS_URL,
-            decode_responses=True,
-        )
-    return _redis_pool
-
-
-def get_redis_client() -> redis.Redis:
-    """Return a Redis client for non-dependency use.
-
-    Used by Celery tasks and router helpers that cannot rely on
-    FastAPI ``Depends()``.  The caller is responsible for calling
-    ``client.close()`` when finished.
-
-    Returns:
-        A ``redis.Redis`` instance on the shared pool.
-    """
-    return redis.Redis(connection_pool=get_redis_pool())

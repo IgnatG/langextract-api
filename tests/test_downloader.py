@@ -10,6 +10,7 @@ import pytest
 from app.services.downloader import (
     DownloadTooLargeError,
     UnsafeRedirectError,
+    UnsupportedContentTypeError,
     _ssrf_safe_redirect_handler,
     download_document,
 )
@@ -30,7 +31,10 @@ class TestDownloadDocument:
         mock_gs.return_value.DOC_DOWNLOAD_MAX_BYTES = 1_000_000
 
         mock_response = MagicMock()
-        mock_response.headers = {"content-length": "11"}
+        mock_response.headers = {
+            "content-length": "11",
+            "content-type": "text/plain; charset=utf-8",
+        }
         mock_response.charset_encoding = "utf-8"
         mock_response.raise_for_status = MagicMock()
         mock_response.iter_bytes.return_value = [b"hello world"]
@@ -119,7 +123,7 @@ class TestSsrfSafeRedirectHandler:
         response = MagicMock(spec=httpx.Response)
         next_req = MagicMock(spec=httpx.Request)
         next_req.url = httpx.URL(
-            "https://cdn.example.com/doc.pdf",
+            "https://cdn.example.com/doc.txt",
         )
         response.next_request = next_req
 
@@ -158,3 +162,189 @@ class TestSsrfSafeRedirectHandler:
 
         # Should not raise
         _ssrf_safe_redirect_handler(request, response)
+
+
+class TestContentTypeValidation:
+    """Tests for Content-Type validation in ``download_document``."""
+
+    @patch("app.services.downloader.get_settings")
+    @patch("app.services.downloader.httpx.Client")
+    def test_rejects_pdf_content_type(
+        self,
+        mock_client_cls,
+        mock_gs,
+    ):
+        """Rejects response with application/pdf Content-Type."""
+        mock_gs.return_value.DOC_DOWNLOAD_TIMEOUT = 30
+        mock_gs.return_value.DOC_DOWNLOAD_MAX_BYTES = 1_000_000
+
+        mock_response = MagicMock()
+        mock_response.headers = {
+            "content-type": "application/pdf",
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        mock_client = MagicMock()
+        mock_client.stream.return_value = mock_response
+        mock_client.__enter__ = lambda s: mock_client
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value = mock_client
+
+        with pytest.raises(
+            UnsupportedContentTypeError,
+            match=r"Unsupported Content-Type",
+        ):
+            download_document("https://example.com/doc")
+
+    @patch("app.services.downloader.get_settings")
+    @patch("app.services.downloader.httpx.Client")
+    def test_rejects_image_content_type(
+        self,
+        mock_client_cls,
+        mock_gs,
+    ):
+        """Rejects response with image/* Content-Type."""
+        mock_gs.return_value.DOC_DOWNLOAD_TIMEOUT = 30
+        mock_gs.return_value.DOC_DOWNLOAD_MAX_BYTES = 1_000_000
+
+        mock_response = MagicMock()
+        mock_response.headers = {
+            "content-type": "image/png",
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        mock_client = MagicMock()
+        mock_client.stream.return_value = mock_response
+        mock_client.__enter__ = lambda s: mock_client
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value = mock_client
+
+        with pytest.raises(
+            UnsupportedContentTypeError,
+            match=r"Unsupported Content-Type",
+        ):
+            download_document("https://example.com/photo")
+
+    @patch("app.services.downloader.get_settings")
+    @patch("app.services.downloader.httpx.Client")
+    def test_accepts_text_plain(
+        self,
+        mock_client_cls,
+        mock_gs,
+    ):
+        """Accepts text/plain Content-Type."""
+        mock_gs.return_value.DOC_DOWNLOAD_TIMEOUT = 30
+        mock_gs.return_value.DOC_DOWNLOAD_MAX_BYTES = 1_000_000
+
+        mock_response = MagicMock()
+        mock_response.headers = {
+            "content-type": "text/plain; charset=utf-8",
+            "content-length": "5",
+        }
+        mock_response.charset_encoding = "utf-8"
+        mock_response.raise_for_status = MagicMock()
+        mock_response.iter_bytes.return_value = [b"hello"]
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        mock_client = MagicMock()
+        mock_client.stream.return_value = mock_response
+        mock_client.__enter__ = lambda s: mock_client
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value = mock_client
+
+        result = download_document("https://example.com/doc")
+        assert result == "hello"
+
+    @patch("app.services.downloader.get_settings")
+    @patch("app.services.downloader.httpx.Client")
+    def test_accepts_text_markdown(
+        self,
+        mock_client_cls,
+        mock_gs,
+    ):
+        """Accepts text/markdown Content-Type."""
+        mock_gs.return_value.DOC_DOWNLOAD_TIMEOUT = 30
+        mock_gs.return_value.DOC_DOWNLOAD_MAX_BYTES = 1_000_000
+
+        mock_response = MagicMock()
+        mock_response.headers = {
+            "content-type": "text/markdown",
+            "content-length": "7",
+        }
+        mock_response.charset_encoding = "utf-8"
+        mock_response.raise_for_status = MagicMock()
+        mock_response.iter_bytes.return_value = [b"# Hello"]
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        mock_client = MagicMock()
+        mock_client.stream.return_value = mock_response
+        mock_client.__enter__ = lambda s: mock_client
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value = mock_client
+
+        result = download_document("https://example.com/doc")
+        assert result == "# Hello"
+
+    @patch("app.services.downloader.get_settings")
+    @patch("app.services.downloader.httpx.Client")
+    def test_allows_missing_content_type(
+        self,
+        mock_client_cls,
+        mock_gs,
+    ):
+        """Allows response with no Content-Type header."""
+        mock_gs.return_value.DOC_DOWNLOAD_TIMEOUT = 30
+        mock_gs.return_value.DOC_DOWNLOAD_MAX_BYTES = 1_000_000
+
+        mock_response = MagicMock()
+        mock_response.headers = {}  # no content-type
+        mock_response.charset_encoding = "utf-8"
+        mock_response.raise_for_status = MagicMock()
+        mock_response.iter_bytes.return_value = [b"text"]
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        mock_client = MagicMock()
+        mock_client.stream.return_value = mock_response
+        mock_client.__enter__ = lambda s: mock_client
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value = mock_client
+
+        result = download_document("https://example.com/doc")
+        assert result == "text"
+
+    @patch("app.services.downloader.get_settings")
+    @patch("app.services.downloader.httpx.Client")
+    def test_allows_octet_stream(
+        self,
+        mock_client_cls,
+        mock_gs,
+    ):
+        """Allows application/octet-stream (best-effort)."""
+        mock_gs.return_value.DOC_DOWNLOAD_TIMEOUT = 30
+        mock_gs.return_value.DOC_DOWNLOAD_MAX_BYTES = 1_000_000
+
+        mock_response = MagicMock()
+        mock_response.headers = {
+            "content-type": "application/octet-stream",
+        }
+        mock_response.charset_encoding = "utf-8"
+        mock_response.raise_for_status = MagicMock()
+        mock_response.iter_bytes.return_value = [b"data"]
+        mock_response.__enter__ = lambda s: mock_response
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        mock_client = MagicMock()
+        mock_client.stream.return_value = mock_response
+        mock_client.__enter__ = lambda s: mock_client
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value = mock_client
+
+        result = download_document("https://example.com/doc")
+        assert result == "data"

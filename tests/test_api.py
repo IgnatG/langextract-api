@@ -58,11 +58,11 @@ async def test_submit_extraction_with_url():
     """Test submitting an extraction task with a document URL."""
     with (
         patch(
-            "app.api.routes.extraction.extract_document",
+            "app.api.routes.extract.extract_document",
         ) as mock_task,
         patch(
-            "app.api.routes.extraction.validate_url",
-            return_value="https://example.com/doc.pdf",
+            "app.api.routes.extract.validate_url",
+            return_value="https://example.com/doc.txt",
         ),
     ):
         mock_result = MagicMock()
@@ -77,7 +77,7 @@ async def test_submit_extraction_with_url():
             response = await client.post(
                 "/api/v1/extract",
                 json={
-                    "document_url": ("https://example.com/doc.pdf"),
+                    "document_url": ("https://example.com/doc.txt"),
                     "provider": "gpt-4o",
                     "passes": 2,
                     "callback_url": ("https://nestjs.example.com/webhooks/done"),
@@ -98,7 +98,7 @@ async def test_submit_extraction_with_url():
 async def test_submit_extraction_with_raw_text():
     """Test submitting an extraction task with raw text."""
     with patch(
-        "app.api.routes.extraction.extract_document",
+        "app.api.routes.extract.extract_document",
     ) as mock_task:
         mock_result = MagicMock()
         mock_result.id = "task-id-text-456"
@@ -180,14 +180,18 @@ async def test_submit_batch_extraction():
 
     with (
         patch(
-            "app.api.routes.extraction.group",
+            "app.api.routes.batch.group",
             return_value=mock_group_instance,
         ),
         patch(
-            "app.api.routes.extraction.finalize_batch",
+            "app.api.routes.batch.finalize_batch",
         ) as mock_finalize,
         patch(
-            "app.api.routes.extraction.validate_url",
+            "app.api.routes.extract.validate_url",
+            return_value="ok",
+        ),
+        patch(
+            "app.api.routes.batch.validate_url",
             return_value="ok",
         ),
     ):
@@ -205,7 +209,7 @@ async def test_submit_batch_extraction():
                     "callback_url": ("https://nestjs.example.com/webhooks/batch"),
                     "documents": [
                         {
-                            "document_url": ("https://example.com/a.pdf"),
+                            "document_url": ("https://example.com/a.txt"),
                         },
                         {
                             "raw_text": ("Some contract text here ..."),
@@ -345,7 +349,7 @@ async def test_idempotency_key_returns_existing_task():
     mock_redis.get.return_value = "existing-task-id"
 
     with patch(
-        "app.api.routes.extraction.get_redis_client",
+        "app.api.routes.extract.get_redis_client",
         return_value=mock_redis,
     ):
         transport = ASGITransport(app=app)
@@ -372,10 +376,10 @@ async def test_submit_extraction_with_callback_headers():
     """callback_headers are forwarded to the task."""
     with (
         patch(
-            "app.api.routes.extraction.extract_document",
+            "app.api.routes.extract.extract_document",
         ) as mock_task,
         patch(
-            "app.api.routes.extraction.validate_url",
+            "app.api.routes.extract.validate_url",
             return_value="ok",
         ),
     ):

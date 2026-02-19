@@ -32,6 +32,27 @@ class UnsafeRedirectError(Exception):
     """Raised when a redirect target fails SSRF validation."""
 
 
+class UnsupportedContentTypeError(Exception):
+    """Raised when the response Content-Type is not text-based."""
+
+
+# Content-Type prefixes / values that indicate text-based
+# content.  Anything outside this set is rejected.
+_ALLOWED_CONTENT_TYPES: frozenset[str] = frozenset(
+    {
+        "text/plain",
+        "text/markdown",
+        "text/html",
+        "text/csv",
+        "text/xml",
+        "text/x-markdown",
+        "application/json",
+        "application/xml",
+        "application/xhtml+xml",
+    }
+)
+
+
 def _ssrf_safe_redirect_handler(
     request: httpx.Request,
     response: httpx.Response,
@@ -103,6 +124,23 @@ def download_document(url: str) -> str:
         client.stream("GET", url) as response,
     ):
         response.raise_for_status()
+
+        # Reject non-text Content-Types early. Servers that
+        # omit the header or return application/octet-stream
+        # are allowed through (best-effort).
+        raw_ct = response.headers.get("content-type", "")
+        # Strip parameters (e.g. "; charset=utf-8").
+        mime = raw_ct.split(";")[0].strip().lower()
+        if (
+            mime
+            and mime != "application/octet-stream"
+            and mime not in _ALLOWED_CONTENT_TYPES
+        ):
+            raise UnsupportedContentTypeError(
+                f"Unsupported Content-Type '{mime}'. "
+                "Only plain-text and Markdown "
+                "documents are accepted."
+            )
 
         # Check Content-Length header first (untrusted but
         # allows an early exit without reading the body).

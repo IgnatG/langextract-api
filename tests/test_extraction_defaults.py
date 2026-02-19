@@ -3,7 +3,7 @@
 Validates:
 - ``DEFAULT_PROMPT_DESCRIPTION`` is a non-empty string
 - ``DEFAULT_EXAMPLES`` has the expected structure
-- Examples can be converted via ``_build_examples()``
+- Examples can be converted via ``build_examples()``
 """
 
 from __future__ import annotations
@@ -65,10 +65,10 @@ class TestDefaultExamples:
         assert "monetary_amount" in classes
 
     def test_examples_are_buildable(self):
-        """Default examples can be converted via _build_examples."""
-        from app.services.extractor import _build_examples
+        """Default examples can be converted via build_examples."""
+        from app.services.converters import build_examples
 
-        result = _build_examples(DEFAULT_EXAMPLES)
+        result = build_examples(DEFAULT_EXAMPLES)
         assert len(result) == len(DEFAULT_EXAMPLES)
         # Each result should have extractions
         for built, raw in zip(

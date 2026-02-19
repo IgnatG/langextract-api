@@ -106,9 +106,9 @@ class TestValidateUrl:
         """A valid HTTPS URL passes validation."""
         mock_gs.return_value.ALLOWED_URL_DOMAINS = []
         result = validate_url(
-            "https://example.com/doc.pdf",
+            "https://example.com/doc.txt",
         )
-        assert result == "https://example.com/doc.pdf"
+        assert result == "https://example.com/doc.txt"
 
     @patch(
         "app.core.security._is_private_ip",

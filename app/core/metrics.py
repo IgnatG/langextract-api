@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import logging
 
-from app.core.config import get_redis_client
 from app.core.constants import REDIS_PREFIX_METRICS
+from app.core.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
 

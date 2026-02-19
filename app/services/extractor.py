@@ -1,9 +1,11 @@
 """
-Extraction service — pure business logic for LangExtract calls.
+Extraction orchestrator — coordinates download, LLM, and formatting.
 
-All LangExtract interaction is isolated here so it can be
-unit-tested without Celery and reused from both the single-
-document and batch task flows.
+Delegates provider resolution to ``app.services.providers`` and
+data conversion to ``app.services.converters``.  All LangExtract
+interaction is isolated here so it can be unit-tested without
+Celery and reused from both the single-document and batch task
+flows.
 """
 
 from __future__ import annotations
@@ -21,8 +23,14 @@ from app.core.defaults import (
     DEFAULT_PROMPT_DESCRIPTION,
 )
 from app.core.security import validate_url
-from app.schemas.extraction import TaskState
+from app.schemas.enums import TaskState
+from app.services.converters import (
+    build_examples,
+    convert_extractions,
+    extract_token_usage,
+)
 from app.services.downloader import download_document
+from app.services.providers import is_openai_model, resolve_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -33,120 +41,7 @@ logger = logging.getLogger(__name__)
 MAX_LLM_RETRIES: int = 2
 
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
-
-
-def _build_examples(
-    raw_examples: list[dict[str, Any]],
-) -> list[lx.data.ExampleData]:
-    """Convert plain-dict examples into ``lx.data.ExampleData``.
-
-    Args:
-        raw_examples: List of dicts, each with ``text`` and
-            ``extractions`` keys.
-
-    Returns:
-        A list of ``ExampleData`` ready for ``lx.extract()``.
-    """
-    return [
-        lx.data.ExampleData(
-            text=ex["text"],
-            extractions=[
-                lx.data.Extraction(
-                    extraction_class=e["extraction_class"],
-                    extraction_text=e["extraction_text"],
-                    attributes=e.get("attributes"),
-                )
-                for e in ex.get("extractions", [])
-            ],
-        )
-        for ex in raw_examples
-    ]
-
-
-def _resolve_api_key(provider: str) -> str | None:
-    """Pick the correct API key for *provider* from settings.
-
-    Args:
-        provider: Model ID string (e.g. ``gpt-4o``).
-
-    Returns:
-        An API key string, or ``None`` if nothing is configured.
-    """
-    settings = get_settings()
-    lower = provider.lower()
-    if "gpt" in lower or "openai" in lower:
-        return settings.OPENAI_API_KEY or None
-    return settings.LANGEXTRACT_API_KEY or settings.GEMINI_API_KEY or None
-
-
-def _is_openai_model(provider: str) -> bool:
-    """Return ``True`` if *provider* is an OpenAI model.
-
-    Args:
-        provider: Model ID string.
-
-    Returns:
-        Boolean indicating whether OpenAI-specific flags apply.
-    """
-    lower = provider.lower()
-    return "gpt" in lower or "openai" in lower
-
-
-def _convert_extractions(
-    result: lx.data.AnnotatedDocument,
-) -> list[dict[str, Any]]:
-    """Flatten ``AnnotatedDocument.extractions`` into dicts.
-
-    Args:
-        result: The annotated document from ``lx.extract()``.
-
-    Returns:
-        A list of entity dicts matching ``ExtractedEntity``
-        schema.
-    """
-    entities: list[dict[str, Any]] = []
-    for ext in result.extractions or []:
-        # Defensive coercion: the LLM occasionally returns a
-        # dict for extraction_text — stringify it so
-        # downstream consumers always receive a string.
-        raw_text = ext.extraction_text
-        if not isinstance(raw_text, (str, int, float)):
-            logger.warning(
-                "Coercing non-scalar extraction_text (%s) to str for class '%s'",
-                type(raw_text).__name__,
-                ext.extraction_class,
-            )
-            raw_text = str(raw_text)
-
-        entity: dict[str, Any] = {
-            "extraction_class": ext.extraction_class,
-            "extraction_text": str(raw_text),
-            "attributes": ext.attributes or {},
-            "char_start": (ext.char_interval.start_pos if ext.char_interval else None),
-            "char_end": (ext.char_interval.end_pos if ext.char_interval else None),
-        }
-        entities.append(entity)
-    return entities
-
-
-def _extract_token_usage(
-    lx_result: lx.data.AnnotatedDocument,
-) -> int | None:
-    """Attempt to extract token usage from a LangExtract result.
-
-    Args:
-        lx_result: The annotated document from ``lx.extract()``.
-
-    Returns:
-        Token count if available, ``None`` otherwise.
-    """
-    usage = getattr(lx_result, "usage", None)
-    if usage and hasattr(usage, "total_tokens"):
-        return int(usage.total_tokens)
-    if isinstance(usage, dict) and "total_tokens" in usage:
-        return int(usage["total_tokens"])
-    return None
+# ── LLM retry wrapper ──────────────────────────────────────
 
 
 def _run_lx_extract_with_retry(
@@ -175,7 +70,7 @@ def _run_lx_extract_with_retry(
     """
     last_exc: ValueError | None = None
 
-    for attempt in range(1, max_retries + 2):  # +2 = 1 initial + retries
+    for attempt in range(1, max_retries + 2):
         try:
             return lx.extract(**extract_kwargs)
         except ValueError as exc:
@@ -200,7 +95,7 @@ def _run_lx_extract_with_retry(
     raise last_exc  # type: ignore[misc]
 
 
-# ── Core extraction logic ───────────────────────────────────────────────────
+# ── Core extraction logic ───────────────────────────────────
 
 
 def run_extraction(
@@ -240,7 +135,7 @@ def run_extraction(
         passes,
     )
 
-    # ── Step 1: Determine input ─────────────────────────────────
+    # ── Step 1: Determine input ─────────────────────────────
     if task_self:
         task_self.update_state(
             state=TaskState.PROGRESS,
@@ -257,24 +152,26 @@ def run_extraction(
         # the API route (e.g. management command, direct Celery
         # call).
         validate_url(document_url, purpose="document_url")
-        logger.info("Downloading document from %s", document_url)
+        logger.info(
+            "Downloading document from %s",
+            document_url,
+        )
         text_input: str = download_document(document_url)
     else:
         text_input = raw_text or ""
 
-    # ── Step 2: Build prompt & examples ─────────────────────────
+    # ── Step 2: Build prompt & examples ─────────────────────
     prompt_description: str = extraction_config.get(
         "prompt_description",
         DEFAULT_PROMPT_DESCRIPTION,
     )
 
     raw_examples: list[dict[str, Any]] = extraction_config.get(
-        "examples",
-        DEFAULT_EXAMPLES,
+        "examples", DEFAULT_EXAMPLES
     )
-    examples = _build_examples(raw_examples)
+    examples = build_examples(raw_examples)
 
-    # ── Step 3: Assemble lx.extract() kwargs ────────────────────
+    # ── Step 3: Assemble lx.extract() kwargs ────────────────
     if task_self:
         task_self.update_state(
             state=TaskState.PROGRESS,
@@ -313,16 +210,16 @@ def run_extraction(
         ]
 
     # API key
-    api_key = _resolve_api_key(provider)
+    api_key = resolve_api_key(provider)
     if api_key:
         extract_kwargs["api_key"] = api_key
 
     # OpenAI-specific flags
-    if _is_openai_model(provider):
+    if is_openai_model(provider):
         extract_kwargs["fence_output"] = True
         extract_kwargs["use_schema_constraints"] = False
 
-    # ── Step 4: Run LangExtract ─────────────────────────────────
+    # ── Step 4: Run LangExtract ─────────────────────────────
     logger.info(
         "Calling lx.extract() for %s (model_id=%s, passes=%d)",
         source,
@@ -339,7 +236,7 @@ def run_extraction(
     if isinstance(lx_result, list):
         lx_result = lx_result[0] if lx_result else lx.data.AnnotatedDocument()
 
-    # ── Step 5: Convert to response schema ──────────────────────
+    # ── Step 5: Convert to response schema ──────────────────
     if task_self:
         task_self.update_state(
             state=TaskState.PROGRESS,
@@ -350,9 +247,9 @@ def run_extraction(
             },
         )
 
-    entities = _convert_extractions(lx_result)
+    entities = convert_extractions(lx_result)
     elapsed_ms = int(time.time() * 1000) - start_ms
-    tokens = _extract_token_usage(lx_result)
+    tokens = extract_token_usage(lx_result)
 
     result: dict[str, Any] = {
         "status": STATUS_COMPLETED,

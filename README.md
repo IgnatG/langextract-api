@@ -22,7 +22,7 @@ Submit a document URL or raw text, get back structured entities — asynchronous
 
 1. Client submits via `POST /api/v1/extract` (or `/extract/batch`)
 2. FastAPI validates, enqueues a Celery task in Redis, returns a **task ID**
-3. A Celery worker runs the LangExtract pipeline
+3. A Celery worker downloads the document text and runs the LangExtract pipeline
 4. Results are stored in Redis (TTL via `RESULT_EXPIRES`)
 5. Client **polls** `GET /api/v1/tasks/{task_id}` or receives a **webhook** callback
 
@@ -81,7 +81,7 @@ Interactive docs at **<http://localhost:8000/api/v1/docs>** (Swagger UI).
 curl -X POST http://localhost:8000/api/v1/extract \
   -H "Content-Type: application/json" \
   -d '{
-    "document_url": "https://example.com/contract.pdf",
+    "document_url": "https://example.com/contract.txt",
     "callback_url": "https://my-app.com/webhooks/done",
     "callback_headers": {
       "Authorization": "Bearer eyJhbGciOi..."
@@ -154,7 +154,7 @@ headers.  The same field is available on batch requests.
 ```json
 {
   "status": "completed",
-  "source": "https://example.com/contract.pdf",
+  "source": "https://example.com/contract.txt",
   "data": {
     "entities": [
       {
@@ -230,6 +230,10 @@ All settings are driven by environment variables (`.env` file supported):
 | `WEBHOOK_SECRET`         | _(empty)_ | HMAC-SHA256 key for signing webhook payloads   |
 | `DOC_DOWNLOAD_TIMEOUT`   | 30        | Document download timeout (seconds)            |
 | `DOC_DOWNLOAD_MAX_BYTES` | 50000000  | Max document size (bytes)                      |
+
+> **Supported document formats:** `document_url` must point to a **plain-text**
+> or **Markdown** resource. Binary formats (PDF, DOCX, etc.) are **not**
+> supported — extract text before submitting to the API.
 
 ### Batch
 

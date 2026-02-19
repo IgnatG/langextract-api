@@ -1,36 +1,58 @@
-"""
-Pydantic models for extraction requests and responses.
-
-All data contracts live here so that route handlers, workers,
-and services can import lightweight schema objects without
-circular dependencies.
-"""
+"""Request models for extraction endpoints."""
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
-
-from app.core.constants import STATUS_REVOKED, STATUS_SUBMITTED
+from pydantic import (
+    BaseModel,
+    Field,
+    HttpUrl,
+    field_validator,
+    model_validator,
+)
 
 # Maximum raw_text size in characters (~10 MB of text).
 _MAX_RAW_TEXT_CHARS: int = 10_000_000
 
-# ── Task state enum ─────────────────────────────────────────
-
-
-class TaskState(StrEnum):
-    """Possible states of a Celery task."""
-
-    PENDING = "PENDING"
-    STARTED = "STARTED"
-    PROGRESS = "PROGRESS"
-    SUCCESS = "SUCCESS"
-    FAILURE = "FAILURE"
-    REVOKED = "REVOKED"
-    RETRY = "RETRY"
+# File extensions that indicate binary (non-text) content.
+# These are rejected at the schema layer before a download
+# is attempted.
+_BINARY_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".pdf",
+        ".docx",
+        ".doc",
+        ".xlsx",
+        ".xls",
+        ".pptx",
+        ".ppt",
+        ".odt",
+        ".ods",
+        ".odp",
+        ".rtf",
+        ".zip",
+        ".tar",
+        ".gz",
+        ".rar",
+        ".7z",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".bmp",
+        ".webp",
+        ".svg",
+        ".mp3",
+        ".mp4",
+        ".wav",
+        ".avi",
+        ".mov",
+        ".exe",
+        ".dll",
+        ".bin",
+    }
+)
 
 
 # ── Provider validation ─────────────────────────────────────
@@ -180,6 +202,33 @@ class ExtractionRequest(BaseModel):
         ),
     )
 
+    @field_validator("document_url")
+    @classmethod
+    def _reject_binary_url_suffix(
+        cls,
+        v: HttpUrl | None,
+    ) -> HttpUrl | None:
+        """Reject document URLs with known binary extensions.
+
+        The API only accepts plain-text or Markdown content.
+        Binary formats (PDF, DOCX, images, etc.) must be
+        converted to text before submission.
+        """
+        if v is not None:
+            path = str(v).split("?")[0].split("#")[0]
+            dot_idx = path.rfind(".")
+            if dot_idx != -1:
+                ext = path[dot_idx:].lower()
+                if ext in _BINARY_EXTENSIONS:
+                    raise ValueError(
+                        f"Unsupported file type '{ext}'. "
+                        "document_url must point to a "
+                        "plain-text or Markdown resource. "
+                        "Convert binary files to text "
+                        "before submitting."
+                    )
+        return v
+
     @field_validator("raw_text")
     @classmethod
     def _cap_raw_text_size(
@@ -197,7 +246,7 @@ class ExtractionRequest(BaseModel):
     def _require_at_least_one_input(
         self,
     ) -> ExtractionRequest:
-        """Ensure the caller provides a document URL or raw text."""
+        """Ensure the caller provides a document URL or text."""
         if not self.document_url and not self.raw_text:
             raise ValueError(
                 "At least one of 'document_url' or 'raw_text' must be provided."
@@ -230,181 +279,4 @@ class BatchExtractionRequest(BaseModel):
             "Optional HTTP headers to include in the batch "
             "webhook request (e.g. Authorization)."
         ),
-    )
-
-
-# ── Response models ─────────────────────────────────────────
-
-
-class TaskSubmitResponse(BaseModel):
-    """Returned immediately when a task is submitted."""
-
-    task_id: str = Field(
-        ...,
-        description="Unique Celery task identifier",
-    )
-    status: str = Field(
-        default=STATUS_SUBMITTED,
-        description="Initial task status",
-    )
-    message: str = Field(
-        default="Task submitted successfully",
-        description="Human-readable status message",
-    )
-
-
-class BatchTaskSubmitResponse(BaseModel):
-    """Returned when a batch is submitted."""
-
-    batch_task_id: str = Field(
-        ...,
-        description=("Celery task ID for the batch orchestrator"),
-    )
-    document_task_ids: list[str] = Field(
-        default_factory=list,
-        description=("Per-document Celery task IDs (parallel mode)"),
-    )
-    status: str = Field(
-        default=STATUS_SUBMITTED,
-        description="Initial batch status",
-    )
-    message: str = Field(
-        default="Batch submitted successfully",
-        description="Human-readable status message",
-    )
-
-
-class TaskStatusResponse(BaseModel):
-    """Returned when polling for task status."""
-
-    task_id: str = Field(
-        ...,
-        description="Unique Celery task identifier",
-    )
-    state: TaskState = Field(
-        ...,
-        description="Current state of the task",
-    )
-    progress: dict[str, Any] | None = Field(
-        default=None,
-        description=("Progress metadata (available in PROGRESS state)"),
-    )
-    result: Any | None = Field(
-        default=None,
-        description=("Task result (available in SUCCESS state)"),
-    )
-    error: str | None = Field(
-        default=None,
-        description=("Error message (available in FAILURE state)"),
-    )
-
-
-class TaskRevokeResponse(BaseModel):
-    """Returned when a task revocation is requested."""
-
-    task_id: str = Field(
-        ...,
-        description="Identifier of the revoked task",
-    )
-    status: str = Field(
-        default=STATUS_REVOKED,
-        description="Revocation status",
-    )
-    message: str = Field(
-        default="Task revocation signal sent",
-        description="Human-readable status message",
-    )
-
-
-# ── Extraction result models (returned by workers) ─────────
-
-
-class ExtractedEntity(BaseModel):
-    """A single entity extracted from the document."""
-
-    extraction_class: str = Field(
-        ...,
-        description=("Entity class (e.g. party, date, monetary_amount)"),
-    )
-    extraction_text: str = Field(
-        ...,
-        description=("Exact text extracted from the source document"),
-    )
-    attributes: dict[str, Any] = Field(
-        default_factory=dict,
-        description=("Key-value attributes providing context"),
-    )
-    char_start: int | None = Field(
-        default=None,
-        description=("Start character offset in the source text"),
-    )
-    char_end: int | None = Field(
-        default=None,
-        description=("End character offset in the source text"),
-    )
-
-
-class ExtractionMetadata(BaseModel):
-    """Metadata about how the extraction was performed."""
-
-    provider: str = Field(
-        ...,
-        description=("AI provider / model that ran the extraction"),
-    )
-    tokens_used: int | None = Field(
-        default=None,
-        description=(
-            "Total tokens consumed (when reported by the "
-            "provider). ``None`` if unavailable."
-        ),
-    )
-    processing_time_ms: int = Field(
-        default=0,
-        description=("Wall-clock processing time in milliseconds"),
-    )
-
-
-class ExtractionResult(BaseModel):
-    """Standardised extraction output returned by every provider."""
-
-    entities: list[ExtractedEntity] = Field(
-        default_factory=list,
-        description="Extracted entities",
-    )
-    metadata: ExtractionMetadata = Field(
-        ...,
-        description="Extraction run metadata",
-    )
-
-
-# ── Health models ───────────────────────────────────────────
-
-
-class HealthResponse(BaseModel):
-    """Returned by the health-check endpoint."""
-
-    status: str = Field(
-        ...,
-        description="Service health status",
-    )
-    version: str = Field(
-        ...,
-        description="Application version",
-    )
-
-
-class CeleryHealthResponse(BaseModel):
-    """Returned by the Celery health-check endpoint."""
-
-    status: str = Field(
-        ...,
-        description="Overall Celery health status",
-    )
-    message: str = Field(
-        ...,
-        description="Human-readable summary",
-    )
-    workers: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="Per-worker status details",
     )
