@@ -216,9 +216,15 @@ async def test_submit_batch_extraction():
 @pytest.mark.asyncio
 async def test_get_task_status_pending():
     """Test polling a pending task."""
-    with patch(
-        "app.api.routes.tasks.AsyncResult",
-    ) as mock_ar:
+    with (
+        patch(
+            "app.api.routes.tasks.AsyncResult",
+        ) as mock_ar,
+        patch(
+            "app.api.routes.tasks._fetch_redis_result",
+            return_value=None,
+        ),
+    ):
         mock_instance = MagicMock()
         mock_instance.state = "PENDING"
         mock_instance.info = None
@@ -237,6 +243,40 @@ async def test_get_task_status_pending():
         data = response.json()
         assert data["state"] == "PENDING"
         assert data["progress"] is not None
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_pending_falls_back_to_redis():
+    """When Celery says PENDING but Redis has a result, return it."""
+    stored = {"status": "completed", "data": {"entities": []}}
+
+    with (
+        patch(
+            "app.api.routes.tasks.AsyncResult",
+        ) as mock_ar,
+        patch(
+            "app.api.routes.tasks._fetch_redis_result",
+            return_value=stored,
+        ),
+    ):
+        mock_instance = MagicMock()
+        mock_instance.state = "PENDING"
+        mock_instance.info = None
+        mock_ar.return_value = mock_instance
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+        ) as client:
+            response = await client.get(
+                "/api/v1/tasks/task-id-expired",
+            )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["state"] == "SUCCESS"
+    assert data["result"] == stored
 
 
 @pytest.mark.asyncio
@@ -306,3 +346,42 @@ async def test_idempotency_key_returns_existing_task():
     data = response.json()
     assert data["task_id"] == "existing-task-id"
     assert "Duplicate" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_submit_extraction_with_callback_headers():
+    """callback_headers are forwarded to the task."""
+    with (
+        patch(
+            "app.api.routes.extraction.extract_document",
+        ) as mock_task,
+        patch(
+            "app.api.routes.extraction.validate_url",
+            return_value="ok",
+        ),
+    ):
+        mock_result = MagicMock()
+        mock_result.id = "task-hdr-api"
+        mock_task.delay.return_value = mock_result
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+        ) as client:
+            response = await client.post(
+                "/api/v1/extract",
+                json={
+                    "raw_text": "test",
+                    "callback_url": ("https://hook.example.com/done"),
+                    "callback_headers": {
+                        "Authorization": "Bearer tok-abc",
+                    },
+                },
+            )
+
+    assert response.status_code == 200
+    call_kwargs = mock_task.delay.call_args.kwargs
+    assert call_kwargs["callback_headers"] == {
+        "Authorization": "Bearer tok-abc",
+    }

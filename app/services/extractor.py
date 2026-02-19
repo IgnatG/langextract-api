@@ -15,10 +15,12 @@ from typing import Any
 import langextract as lx
 
 from app.core.config import get_settings
+from app.core.constants import STATUS_COMPLETED
 from app.core.defaults import (
     DEFAULT_EXAMPLES,
     DEFAULT_PROMPT_DESCRIPTION,
 )
+from app.schemas.extraction import TaskState
 from app.services.downloader import download_document
 
 logger = logging.getLogger(__name__)
@@ -240,7 +242,7 @@ def run_extraction(
     # ── Step 1: Determine input ─────────────────────────────────
     if task_self:
         task_self.update_state(
-            state="PROGRESS",
+            state=TaskState.PROGRESS,
             meta={
                 "step": "preparing",
                 "source": source,
@@ -269,7 +271,7 @@ def run_extraction(
     # ── Step 3: Assemble lx.extract() kwargs ────────────────────
     if task_self:
         task_self.update_state(
-            state="PROGRESS",
+            state=TaskState.PROGRESS,
             meta={
                 "step": "extracting",
                 "source": source,
@@ -334,7 +336,7 @@ def run_extraction(
     # ── Step 5: Convert to response schema ──────────────────────
     if task_self:
         task_self.update_state(
-            state="PROGRESS",
+            state=TaskState.PROGRESS,
             meta={
                 "step": "post_processing",
                 "source": source,
@@ -347,7 +349,7 @@ def run_extraction(
     tokens = _extract_token_usage(lx_result)
 
     result: dict[str, Any] = {
-        "status": "completed",
+        "status": STATUS_COMPLETED,
         "source": source,
         "data": {
             "entities": entities,

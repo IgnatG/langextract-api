@@ -461,6 +461,46 @@ class TestFireWebhook:
         assert "X-Webhook-Signature" in headers
         assert "X-Webhook-Timestamp" in headers
 
+    @patch("app.services.webhook.httpx.Client")
+    @patch(
+        "app.services.webhook.validate_url",
+        return_value="ok",
+    )
+    @patch("app.services.webhook.get_settings")
+    def test_extra_headers_are_merged(
+        self,
+        mock_gs,
+        mock_validate,
+        mock_client_cls,
+    ):
+        """Caller-supplied extra_headers appear in the request."""
+        from app.services.webhook import fire_webhook
+
+        mock_gs.return_value.WEBHOOK_SECRET = ""
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_client.post.return_value = mock_resp
+        mock_client_cls.return_value.__enter__ = lambda s: mock_client
+        mock_client_cls.return_value.__exit__ = MagicMock(
+            return_value=False,
+        )
+
+        fire_webhook(
+            "https://example.com/hook",
+            {"task_id": "abc"},
+            extra_headers={"Authorization": "Bearer tok-xyz"},
+        )
+
+        call_kwargs = mock_client.post.call_args
+        headers = call_kwargs.kwargs.get(
+            "headers",
+            call_kwargs[1].get("headers", {}),
+        )
+        assert headers["Authorization"] == "Bearer tok-xyz"
+        assert headers["Content-Type"] == "application/json"
+
 
 # ── run_extraction (integration with mocked lx.extract) ────
 
@@ -816,6 +856,131 @@ class TestExtractDocumentTask:
                 extract_document.run(raw_text="test")
         finally:
             extract_document.pop_request()
+
+    def test_does_not_record_failure_on_retry(
+        self,
+        mock_settings,
+    ):
+        """Metric failure is NOT recorded when retries remain."""
+        from app.workers.tasks import extract_document
+
+        extract_document.push_request(
+            id="task-retry-1",
+            retries=0,
+        )
+        try:
+            with (
+                patch(
+                    "app.workers.tasks.run_extraction",
+                    side_effect=RuntimeError("API error"),
+                ),
+                patch(
+                    "app.workers.tasks.record_task_completed",
+                ) as mock_metric,
+                pytest.raises(RuntimeError),
+            ):
+                extract_document.run(raw_text="test")
+        finally:
+            extract_document.pop_request()
+
+        # Not yet final → no failure metric
+        mock_metric.assert_not_called()
+
+    def test_records_failure_on_final_retry(
+        self,
+        mock_settings,
+    ):
+        """Metric failure IS recorded when retries exhausted."""
+        from app.workers.tasks import extract_document
+
+        extract_document.push_request(
+            id="task-final-1",
+            retries=extract_document.max_retries,
+        )
+        try:
+            with (
+                patch(
+                    "app.workers.tasks.run_extraction",
+                    side_effect=RuntimeError("final"),
+                ),
+                patch(
+                    "app.workers.tasks.record_task_completed",
+                ) as mock_metric,
+                pytest.raises(RuntimeError),
+            ):
+                extract_document.run(raw_text="test")
+        finally:
+            extract_document.pop_request()
+
+        mock_metric.assert_called_once()
+        assert mock_metric.call_args.kwargs["success"] is False
+        assert mock_metric.call_args.kwargs["duration_s"] > 0
+
+    def test_stores_result_in_redis(self, mock_settings):
+        """Successful extraction stores result under Redis key."""
+        from app.workers.tasks import extract_document
+
+        mock_result = {
+            "status": "completed",
+            "source": "<raw_text>",
+            "data": {"entities": []},
+        }
+
+        extract_document.push_request(id="task-redis-1")
+        try:
+            with (
+                patch(
+                    "app.workers.tasks.run_extraction",
+                    return_value=mock_result,
+                ),
+                patch(
+                    "app.workers.tasks._store_result_in_redis",
+                ) as mock_store,
+            ):
+                extract_document.run(raw_text="test")
+        finally:
+            extract_document.pop_request()
+
+        mock_store.assert_called_once_with(
+            "task-redis-1",
+            mock_result,
+        )
+
+    def test_passes_callback_headers_to_webhook(
+        self,
+        mock_settings,
+    ):
+        """callback_headers are forwarded to fire_webhook."""
+        from app.workers.tasks import extract_document
+
+        mock_result = {
+            "status": "completed",
+            "source": "<raw_text>",
+            "data": {"entities": []},
+        }
+        headers = {"Authorization": "Bearer tok123"}
+
+        extract_document.push_request(id="task-hdr-1")
+        try:
+            with (
+                patch(
+                    "app.workers.tasks.run_extraction",
+                    return_value=mock_result,
+                ),
+                patch(
+                    "app.workers.tasks.fire_webhook",
+                ) as mock_wh,
+            ):
+                extract_document.run(
+                    raw_text="test",
+                    callback_url="https://hook.example.com/done",
+                    callback_headers=headers,
+                )
+        finally:
+            extract_document.pop_request()
+
+        mock_wh.assert_called_once()
+        assert mock_wh.call_args.kwargs["extra_headers"] == headers
 
 
 # ── extract_batch task ──────────────────────────────────────

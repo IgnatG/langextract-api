@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 def fire_webhook(
     callback_url: str,
     payload: dict[str, Any],
+    *,
+    extra_headers: dict[str, str] | None = None,
 ) -> None:
     """POST *payload* to *callback_url*, logging but never raising.
 
@@ -31,9 +33,15 @@ def fire_webhook(
     ``X-Webhook-Timestamp`` headers so receivers can verify
     authenticity.
 
+    Callers can supply *extra_headers* (e.g. an
+    ``Authorization`` bearer token) that will be merged into
+    the outgoing request.
+
     Args:
         callback_url: The URL to POST to.
         payload: JSON-serialisable dict to send.
+        extra_headers: Optional additional HTTP headers to
+            include in the request.
     """
     try:
         validate_url(callback_url, purpose="callback_url")
@@ -66,6 +74,7 @@ def fire_webhook(
                 headers={
                     "Content-Type": "application/json",
                     **headers,
+                    **(extra_headers or {}),
                 },
             )
             resp.raise_for_status()

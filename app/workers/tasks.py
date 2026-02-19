@@ -13,13 +13,21 @@ tested and reused independently of Celery.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any
 
 from celery import group
+from celery.exceptions import Retry
 
+from app.core.config import get_redis_client, get_settings
+from app.core.constants import (
+    REDIS_PREFIX_TASK_RESULT,
+    STATUS_COMPLETED,
+)
 from app.core.metrics import record_task_completed
+from app.schemas.extraction import TaskState
 from app.services.extractor import run_extraction
 from app.services.webhook import fire_webhook
 from app.workers.celery_app import celery_app
@@ -28,6 +36,39 @@ logger = logging.getLogger(__name__)
 
 
 # ── Single-document extraction ──────────────────────────────────────────────
+
+
+def _store_result_in_redis(
+    task_id: str,
+    result: dict[str, Any],
+) -> None:
+    """Persist *result* under a predictable Redis key.
+
+    Stored separately from Celery's result backend so the
+    task-status endpoint can fall back to this key when
+    Celery metadata has expired or is unavailable.
+
+    Args:
+        task_id: The Celery task identifier.
+        result: JSON-serialisable result dict.
+    """
+    try:
+        settings = get_settings()
+        client = get_redis_client()
+        try:
+            client.setex(
+                f"{REDIS_PREFIX_TASK_RESULT}{task_id}",
+                settings.RESULT_EXPIRES,
+                json.dumps(result),
+            )
+        finally:
+            client.close()
+    except Exception:
+        logger.warning(
+            "Failed to persist result for task %s",
+            task_id,
+            exc_info=True,
+        )
 
 
 @celery_app.task(
@@ -44,6 +85,7 @@ def extract_document(
     passes: int = 1,
     callback_url: str | None = None,
     extraction_config: dict[str, Any] | None = None,
+    callback_headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Extract structured data from a single document.
 
@@ -55,6 +97,8 @@ def extract_document(
         callback_url: Optional webhook URL.
         extraction_config: Optional overrides for the extraction
             pipeline.
+        callback_headers: Optional extra HTTP headers to send
+            with the webhook request (e.g. Authorization).
 
     Returns:
         A dict containing the extraction result and metadata.
@@ -71,21 +115,36 @@ def extract_document(
         )
         elapsed_s = time.monotonic() - start_s
 
+        # Persist result under a predictable Redis key
+        _store_result_in_redis(self.request.id, result)
+
         # Fire webhook if requested
         if callback_url:
             fire_webhook(
                 callback_url,
                 {"task_id": self.request.id, **result},
+                extra_headers=callback_headers,
             )
 
         record_task_completed(success=True, duration_s=elapsed_s)
         return result
 
+    except Retry:
+        # Celery retry — do not record as a final failure.
+        raise
+
     except Exception as exc:
         elapsed_s = time.monotonic() - start_s
-        record_task_completed(success=False, duration_s=elapsed_s)
+        is_final = self.request.retries >= self.max_retries
+        if is_final:
+            record_task_completed(
+                success=False,
+                duration_s=elapsed_s,
+            )
         logger.exception(
-            "Extraction failed for %s: %s",
+            "Extraction failed (attempt %d/%d) for %s: %s",
+            self.request.retries + 1,
+            self.max_retries + 1,
             document_url or "<raw_text>",
             exc,
         )
@@ -106,6 +165,7 @@ def extract_batch(
     batch_id: str,
     documents: list[dict[str, Any]],
     callback_url: str | None = None,
+    callback_headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Fan out per-document Celery tasks via ``group()``.
 
@@ -117,6 +177,8 @@ def extract_batch(
         batch_id: Unique identifier for this batch.
         documents: List of extraction request dicts.
         callback_url: Optional batch-level webhook URL.
+        callback_headers: Optional extra HTTP headers to send
+            with the webhook request (e.g. Authorization).
 
     Returns:
         Aggregated batch result with per-document outcomes.
@@ -148,7 +210,7 @@ def extract_batch(
     # to return immediately.
     child_ids = [r.id for r in group_result.children]
     self.update_state(
-        state="PROGRESS",
+        state=TaskState.PROGRESS,
         meta={
             "batch_id": batch_id,
             "document_task_ids": child_ids,
@@ -175,7 +237,7 @@ def extract_batch(
             errors.append({"source": source, "error": err_msg})
 
     batch_result: dict[str, Any] = {
-        "status": "completed",
+        "status": STATUS_COMPLETED,
         "batch_id": batch_id,
         "total": total,
         "successful": len(results),
@@ -189,6 +251,10 @@ def extract_batch(
         fire_webhook(
             callback_url,
             {"task_id": self.request.id, **batch_result},
+            extra_headers=callback_headers,
         )
+
+    # Persist batch result under a predictable Redis key
+    _store_result_in_redis(self.request.id, batch_result)
 
     return batch_result

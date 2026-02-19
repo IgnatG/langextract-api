@@ -7,6 +7,10 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.core.config import get_redis_client, get_settings
+from app.core.constants import (
+    REDIS_PREFIX_IDEMPOTENCY,
+    STATUS_SUBMITTED,
+)
 from app.core.metrics import record_task_submitted
 from app.core.security import validate_url
 from app.schemas import (
@@ -20,9 +24,6 @@ from app.workers.tasks import extract_batch, extract_document
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["extraction"])
-
-# Redis key prefix for idempotency mappings
-_IDEM_PREFIX = "idempotency:"
 
 
 def _validate_request_urls(
@@ -82,7 +83,7 @@ def submit_extraction(
     if request.idempotency_key:
         redis_client = get_redis_client()
         try:
-            idem_key = f"{_IDEM_PREFIX}{request.idempotency_key}"
+            idem_key = f"{REDIS_PREFIX_IDEMPOTENCY}{request.idempotency_key}"
             existing_task_id = redis_client.get(idem_key)
             if existing_task_id:
                 logger.info(
@@ -92,7 +93,7 @@ def submit_extraction(
                 )
                 return TaskSubmitResponse(
                     task_id=existing_task_id,
-                    status="submitted",
+                    status=STATUS_SUBMITTED,
                     message=("Duplicate request — returning existing task"),
                 )
         finally:
@@ -108,6 +109,7 @@ def submit_extraction(
         passes=request.passes,
         callback_url=(str(request.callback_url) if request.callback_url else None),
         extraction_config=extraction_config,
+        callback_headers=request.callback_headers,
     )
 
     # Store idempotency mapping
@@ -115,7 +117,7 @@ def submit_extraction(
         settings = get_settings()
         redis_client = get_redis_client()
         try:
-            idem_key = f"{_IDEM_PREFIX}{request.idempotency_key}"
+            idem_key = f"{REDIS_PREFIX_IDEMPOTENCY}{request.idempotency_key}"
             redis_client.setex(
                 idem_key,
                 settings.RESULT_EXPIRES,
@@ -129,7 +131,7 @@ def submit_extraction(
     source = str(request.document_url) if request.document_url else "<raw_text>"
     return TaskSubmitResponse(
         task_id=task.id,
-        status="submitted",
+        status=STATUS_SUBMITTED,
         message=f"Extraction submitted for {source}",
     )
 
@@ -177,6 +179,7 @@ def submit_batch_extraction(
         batch_id=request.batch_id,
         documents=documents,
         callback_url=(str(request.callback_url) if request.callback_url else None),
+        callback_headers=request.callback_headers,
     )
 
     # Retrieve the per-document child task IDs that the
@@ -198,7 +201,7 @@ def submit_batch_extraction(
     return BatchTaskSubmitResponse(
         batch_task_id=task.id,
         document_task_ids=child_ids,
-        status="submitted",
+        status=STATUS_SUBMITTED,
         message=(
             f"Batch '{request.batch_id}' submitted "
             f"with {len(request.documents)} document(s)"

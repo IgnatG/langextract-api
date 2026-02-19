@@ -15,16 +15,14 @@ from __future__ import annotations
 import logging
 
 from app.core.config import get_redis_client
+from app.core.constants import REDIS_PREFIX_METRICS
 
 logger = logging.getLogger(__name__)
 
-# Redis key prefix for all metric counters.
-_PREFIX = "metrics:"
-
-_SUBMITTED_KEY = f"{_PREFIX}tasks_submitted_total"
-_SUCCEEDED_KEY = f"{_PREFIX}tasks_succeeded_total"
-_FAILED_KEY = f"{_PREFIX}tasks_failed_total"
-_DURATION_KEY = f"{_PREFIX}task_duration_seconds_sum"
+_SUBMITTED_KEY = f"{REDIS_PREFIX_METRICS}tasks_submitted_total"
+_SUCCEEDED_KEY = f"{REDIS_PREFIX_METRICS}tasks_succeeded_total"
+_FAILED_KEY = f"{REDIS_PREFIX_METRICS}tasks_failed_total"
+_DURATION_KEY = f"{REDIS_PREFIX_METRICS}task_duration_seconds_sum"
 
 
 def record_task_submitted() -> None:

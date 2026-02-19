@@ -13,6 +13,8 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
+from app.core.constants import STATUS_REVOKED, STATUS_SUBMITTED
+
 # Maximum raw_text size in characters (~10 MB of text).
 _MAX_RAW_TEXT_CHARS: int = 10_000_000
 
@@ -149,6 +151,15 @@ class ExtractionRequest(BaseModel):
             "storing it in Redis."
         ),
     )
+    callback_headers: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Optional HTTP headers to include in the webhook "
+            'request (e.g. ``{"Authorization": '
+            '"Bearer <token>"}``).  Merged with the '
+            "default Content-Type and signature headers."
+        ),
+    )
     extraction_config: ExtractionConfig = Field(
         default_factory=ExtractionConfig,
         description=(
@@ -213,6 +224,13 @@ class BatchExtractionRequest(BaseModel):
             "Overrides per-document callback_url values."
         ),
     )
+    callback_headers: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Optional HTTP headers to include in the batch "
+            "webhook request (e.g. Authorization)."
+        ),
+    )
 
 
 # ── Response models ─────────────────────────────────────────
@@ -226,7 +244,7 @@ class TaskSubmitResponse(BaseModel):
         description="Unique Celery task identifier",
     )
     status: str = Field(
-        default="submitted",
+        default=STATUS_SUBMITTED,
         description="Initial task status",
     )
     message: str = Field(
@@ -247,7 +265,7 @@ class BatchTaskSubmitResponse(BaseModel):
         description=("Per-document Celery task IDs (parallel mode)"),
     )
     status: str = Field(
-        default="submitted",
+        default=STATUS_SUBMITTED,
         description="Initial batch status",
     )
     message: str = Field(
@@ -289,7 +307,7 @@ class TaskRevokeResponse(BaseModel):
         description="Identifier of the revoked task",
     )
     status: str = Field(
-        default="revoked",
+        default=STATUS_REVOKED,
         description="Revocation status",
     )
     message: str = Field(
