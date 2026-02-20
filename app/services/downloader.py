@@ -7,22 +7,29 @@ Downloads documents from user-supplied URLs, respecting
 settings.
 
 Only plain-text and Markdown content is accepted.  Validation
-is two-layered:
+is three-layered:
 
-1. **Content-Type allowlist** — reject anything outside a
+1. **Extension guardrail** — reject URLs whose path clearly
+   ends with a binary extension (e.g. ``.pdf``, ``.docx``).
+2. **Content-Type allowlist** — reject anything outside a
    narrow set of text MIME types.
-2. **Byte-sniff** — inspect the first 512 bytes for binary
-   signatures (``%PDF-``, ``PK\\x03\\x04``, null bytes) so
-   that a lying ``Content-Type`` cannot smuggle binary data.
+3. **Byte-sniff** — inspect the first 512 bytes for binary
+   signatures (``%PDF-``, ``PK\\x03\\x04``, ``GIF``,
+   ``\\x1f\\x8b`` GZIP, null bytes …) so that a lying
+   ``Content-Type`` cannot smuggle binary data.
 
 Each redirect hop is re-validated against the SSRF rules in
 ``app.core.security`` so that a "safe" URL cannot 302-redirect
 the worker to a private IP or metadata endpoint.
+
+The URL itself is also re-validated at the start of
+``download_document`` as a defence-in-depth measure.
 """
 
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
 
 import httpx
 
@@ -51,6 +58,10 @@ class BinaryContentError(Exception):
     """Raised when byte-sniffing detects binary content."""
 
 
+class UnsupportedExtensionError(Exception):
+    """Raised when the URL path has a known binary extension."""
+
+
 # ── Strict allowlist ────────────────────────────────────────
 # Only plain-text and Markdown are accepted.  Every other MIME
 # type — including application/octet-stream and missing
@@ -63,6 +74,19 @@ _ALLOWED_CONTENT_TYPES: frozenset[str] = frozenset(
         "text/x-markdown",
         "text/md",
         "application/markdown",
+    }
+)
+
+# File extensions accepted by the UX guardrail.  This is *not*
+# the security boundary (Content-Type + sniffing handle that),
+# but it gives callers an immediate, descriptive error when the
+# URL clearly points to a binary file.
+_ALLOWED_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".txt",
+        ".md",
+        ".markdown",
+        ".text",
     }
 )
 
@@ -111,6 +135,10 @@ def _looks_like_text(data: bytes) -> bool:
         return False
     if data[:4] == b"\x7fELF":  # ELF executable
         return False
+    if data[:3] == b"GIF":  # GIF (GIF87a / GIF89a)
+        return False
+    if data[:2] == b"\x1f\x8b":  # GZIP
+        return False
 
     # Null bytes are a reliable binary indicator
     return b"\x00" not in data
@@ -157,20 +185,48 @@ def download_document(url: str) -> str:
     ``DOC_DOWNLOAD_MAX_BYTES``.
 
     Args:
-        url: The document URL to fetch (already SSRF-validated
-            at the API layer).
+        url: The document URL to fetch.  Re-validated against
+            SSRF rules here as a defence-in-depth measure.
 
     Returns:
         The decoded document text.
 
     Raises:
+        ValueError: If the URL fails SSRF validation.
+        UnsupportedExtensionError: If the URL path has a
+            known binary extension.
         UnsafeRedirectError: If any redirect target fails the
             SSRF check.
+        UnsupportedContentTypeError: If the Content-Type is
+            outside the allowed set.
         DownloadTooLargeError: If the response exceeds the
             configured max bytes.
+        BinaryContentError: If byte-sniffing detects binary
+            content or decoding fails.
         httpx.HTTPStatusError: On non-2xx responses.
         httpx.TimeoutException: On timeout.
     """
+    # ── Defence-in-depth URL re-validation ──────────────────
+    # The API layer already validates URLs, but re-check here
+    # in case a task was enqueued by other means (misconfig,
+    # internal call, future queue consumer).
+    validate_url(url, purpose="document_url")
+
+    # ── UX guardrail: reject obvious binary extensions ──────
+    # This is not the security boundary (Content-Type +
+    # sniffing handle that), but it saves a round-trip and
+    # gives the caller a clear error message.
+    path = urlparse(url).path
+    dot_idx = path.rfind(".")
+    ext = path[dot_idx:].lower() if dot_idx != -1 else ""
+    if not ext or ext not in _ALLOWED_EXTENSIONS:
+        raise UnsupportedExtensionError(
+            f"URL extension '{ext or '<none>'}' is not accepted. "
+            "Only .txt and .md URLs are allowed. "
+            "Convert other files to text before "
+            "submitting."
+        )
+
     settings = get_settings()
     timeout = settings.DOC_DOWNLOAD_TIMEOUT
     max_bytes = settings.DOC_DOWNLOAD_MAX_BYTES

@@ -8,15 +8,24 @@ import httpx
 import pytest
 
 from app.services.downloader import (
+    _ALLOWED_EXTENSIONS,
     BinaryContentError,
     DownloadTooLargeError,
     UnsafeRedirectError,
     UnsupportedContentTypeError,
+    UnsupportedExtensionError,
     _is_allowed_content_type,
     _looks_like_text,
     _ssrf_safe_redirect_handler,
     download_document,
 )
+
+
+@pytest.fixture(autouse=True)
+def _mock_validate_url():
+    """Prevent real DNS resolution in every download test."""
+    with patch("app.services.downloader.validate_url"):
+        yield
 
 
 class TestDownloadDocument:
@@ -85,7 +94,7 @@ class TestDownloadDocument:
             DownloadTooLargeError,
             match=r"Content-Length",
         ):
-            download_document("https://example.com/big.bin")
+            download_document("https://example.com/big.txt")
 
     @patch("app.services.downloader.get_settings")
     @patch("app.services.downloader.httpx.Client")
@@ -119,7 +128,7 @@ class TestDownloadDocument:
             DownloadTooLargeError,
             match=r"exceeded",
         ):
-            download_document("https://example.com/big.bin")
+            download_document("https://example.com/big.txt")
 
 
 class TestSsrfSafeRedirectHandler:
@@ -204,7 +213,7 @@ class TestContentTypeValidation:
             UnsupportedContentTypeError,
             match=r"Unsupported Content-Type",
         ):
-            download_document("https://example.com/doc")
+            download_document("https://example.com/doc.txt")
 
     @patch("app.services.downloader.get_settings")
     @patch("app.services.downloader.httpx.Client")
@@ -235,7 +244,7 @@ class TestContentTypeValidation:
             UnsupportedContentTypeError,
             match=r"Unsupported Content-Type",
         ):
-            download_document("https://example.com/photo")
+            download_document("https://example.com/photo.txt")
 
     @patch("app.services.downloader.get_settings")
     @patch("app.services.downloader.httpx.Client")
@@ -265,7 +274,7 @@ class TestContentTypeValidation:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client_cls.return_value = mock_client
 
-        result = download_document("https://example.com/doc")
+        result = download_document("https://example.com/doc.txt")
         assert result == "hello"
 
     @patch("app.services.downloader.get_settings")
@@ -296,7 +305,7 @@ class TestContentTypeValidation:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client_cls.return_value = mock_client
 
-        result = download_document("https://example.com/doc")
+        result = download_document("https://example.com/doc.md")
         assert result == "# Hello"
 
     @patch("app.services.downloader.get_settings")
@@ -326,7 +335,7 @@ class TestContentTypeValidation:
             UnsupportedContentTypeError,
             match=r"Unsupported Content-Type",
         ):
-            download_document("https://example.com/doc")
+            download_document("https://example.com/doc.txt")
 
     @patch("app.services.downloader.get_settings")
     @patch("app.services.downloader.httpx.Client")
@@ -357,7 +366,7 @@ class TestContentTypeValidation:
             UnsupportedContentTypeError,
             match=r"Unsupported Content-Type",
         ):
-            download_document("https://example.com/doc")
+            download_document("https://example.com/doc.txt")
 
     @patch("app.services.downloader.get_settings")
     @patch("app.services.downloader.httpx.Client")
@@ -388,7 +397,7 @@ class TestContentTypeValidation:
             UnsupportedContentTypeError,
             match=r"Unsupported Content-Type",
         ):
-            download_document("https://example.com/data.json")
+            download_document("https://example.com/data.txt")
 
     @patch("app.services.downloader.get_settings")
     @patch("app.services.downloader.httpx.Client")
@@ -418,7 +427,7 @@ class TestContentTypeValidation:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client_cls.return_value = mock_client
 
-        result = download_document("https://example.com/doc")
+        result = download_document("https://example.com/doc.md")
         assert result == "# Hello"
 
 
@@ -502,6 +511,14 @@ class TestLooksLikeText:
     def test_rejects_null_bytes(self):
         """Data containing null bytes is rejected."""
         assert _looks_like_text(b"hello\x00world") is False
+
+    def test_rejects_gif_signature(self):
+        """GIF magic bytes are rejected."""
+        assert _looks_like_text(b"GIF89a\x01\x00") is False
+
+    def test_rejects_gzip_signature(self):
+        """GZIP magic bytes are rejected."""
+        assert _looks_like_text(b"\x1f\x8b\x08\x00") is False
 
     def test_empty_bytes(self):
         """Empty data passes (no binary indicators)."""
@@ -587,3 +604,89 @@ class TestByteSniffIntegration:
             match=r"binary",
         ):
             download_document("https://example.com/doc.txt")
+
+
+class TestExtensionGuardrail:
+    """Tests for the URL extension guardrail."""
+
+    def test_allows_txt_extension(self):
+        """.txt is in the allowed set."""
+        assert ".txt" in _ALLOWED_EXTENSIONS
+
+    def test_allows_md_extension(self):
+        """.md is in the allowed set."""
+        assert ".md" in _ALLOWED_EXTENSIONS
+
+    def test_allows_markdown_extension(self):
+        """.markdown is in the allowed set."""
+        assert ".markdown" in _ALLOWED_EXTENSIONS
+
+    def test_rejects_no_extension(self):
+        """URLs without an extension are rejected."""
+        assert "" not in _ALLOWED_EXTENSIONS
+
+    @patch("app.services.downloader.get_settings")
+    def test_rejects_extensionless_url(self, mock_gs):
+        """URL with no file extension is rejected early."""
+        mock_gs.return_value.DOC_DOWNLOAD_TIMEOUT = 30
+        mock_gs.return_value.DOC_DOWNLOAD_MAX_BYTES = 1_000_000
+
+        with pytest.raises(
+            UnsupportedExtensionError,
+            match=r"<none>",
+        ):
+            download_document("https://example.com/document")
+
+    @patch("app.services.downloader.get_settings")
+    def test_rejects_pdf_extension(self, mock_gs):
+        """URL with .pdf extension is rejected early."""
+        mock_gs.return_value.DOC_DOWNLOAD_TIMEOUT = 30
+        mock_gs.return_value.DOC_DOWNLOAD_MAX_BYTES = 1_000_000
+
+        with pytest.raises(
+            UnsupportedExtensionError,
+            match=r"\.pdf",
+        ):
+            download_document("https://example.com/doc.pdf")
+
+    @patch("app.services.downloader.get_settings")
+    def test_rejects_docx_extension(self, mock_gs):
+        """URL with .docx extension is rejected early."""
+        mock_gs.return_value.DOC_DOWNLOAD_TIMEOUT = 30
+        mock_gs.return_value.DOC_DOWNLOAD_MAX_BYTES = 1_000_000
+
+        with pytest.raises(
+            UnsupportedExtensionError,
+            match=r"\.docx",
+        ):
+            download_document("https://example.com/doc.docx")
+
+    @patch("app.services.downloader.get_settings")
+    def test_rejects_json_extension(self, mock_gs):
+        """URL with .json extension is rejected early."""
+        mock_gs.return_value.DOC_DOWNLOAD_TIMEOUT = 30
+        mock_gs.return_value.DOC_DOWNLOAD_MAX_BYTES = 1_000_000
+
+        with pytest.raises(
+            UnsupportedExtensionError,
+            match=r"\.json",
+        ):
+            download_document("https://example.com/data.json")
+
+
+class TestValidateUrlDefenceInDepth:
+    """Tests for the defence-in-depth URL re-validation."""
+
+    def test_rejects_private_ip_url(self):
+        """URL pointing to a private IP is rejected."""
+        with (
+            patch(
+                "app.services.downloader.validate_url",
+                side_effect=ValueError("private IP"),
+            ),
+            pytest.raises(
+                ValueError,
+                match="private IP",
+            ),
+        ):
+            download_document("http://169.254.169.254/meta")

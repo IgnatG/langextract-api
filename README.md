@@ -95,7 +95,7 @@ curl -X POST http://localhost:8000/api/v1/extract \
 {
   "task_id": "a1b2c3d4-...",
   "status": "submitted",
-  "message": "Extraction submitted for https://example.com/contract.pdf"
+  "message": "Extraction submitted for https://example.com/contract.txt"
 }
 ```
 
