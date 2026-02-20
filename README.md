@@ -312,27 +312,54 @@ langextract-api/
 ├── app/
 │   ├── main.py                    # App factory, middleware, lifespan
 │   ├── core/
-│   │   ├── config.py              # Settings, Redis pool
+│   │   ├── config.py              # Settings (pydantic-settings)
+│   │   ├── constants.py           # Shared literals (retries, timeouts, …)
 │   │   ├── defaults.py            # Default prompt & few-shot examples
-│   │   ├── logging.py             # Structured logging setup
+│   │   ├── logging.py             # Structured logging setup (structlog)
+│   │   ├── metrics.py             # Prometheus counters & histograms
+│   │   ├── redis.py               # Redis connection pool helper
 │   │   └── security.py            # SSRF protection, URL validation
 │   ├── services/
-│   │   ├── extractor.py           # Extraction business logic
+│   │   ├── converters.py          # Input normalisation helpers
+│   │   ├── downloader.py          # URL fetch with SSRF / content guards
+│   │   ├── extractor.py           # LangExtract extraction business logic
+│   │   ├── providers.py           # LLM provider factory
 │   │   └── webhook.py             # Result persistence & webhook delivery
 │   ├── workers/
 │   │   ├── celery_app.py          # Celery app configuration
-│   │   └── tasks.py               # Celery task definitions
+│   │   ├── tasks.py               # Celery task entry-points (route to below)
+│   │   ├── extract_task.py        # Single-document extraction task
+│   │   └── batch_task.py          # Batch extraction task
 │   ├── api/
-│   │   ├── deps.py                # FastAPI dependencies (Redis, etc.)
+│   │   ├── deps.py                # FastAPI dependencies (Redis, auth, …)
 │   │   └── routes/
-│   │       ├── extraction.py      # POST /extract, POST /extract/batch
+│   │       ├── extract.py         # POST /extract
+│   │       ├── batch.py           # POST /extract/batch
 │   │       ├── health.py          # GET /health, GET /metrics
 │   │       └── tasks.py           # GET/DELETE /tasks/{task_id}
 │   └── schemas/
-│       └── extraction.py          # Pydantic request/response models
-├── tests/                         # pytest suite (147 tests)
+│       ├── enums.py               # TaskStatus and other enumerations
+│       ├── health.py              # HealthResponse model
+│       ├── requests.py            # ExtractionRequest, BatchRequest
+│       ├── responses.py           # SubmitResponse, TaskResponse
+│       └── results.py             # Entity, ExtractionResult
+├── tests/                         # pytest suite (219 tests)
 ├── docs/                          # security.md, deployment.md, recipes.md
-├── examples/                      # curl scripts, JSON config samples
+├── examples/
+│   ├── curl/                      # Bash / curl scripts
+│   │   ├── extract_text.sh        #   raw-text submit + poll
+│   │   ├── extract_url.sh         #   URL submit
+│   │   ├── extract_batch.sh       #   batch submit + poll
+│   │   └── poll_status.sh         #   generic poller
+│   ├── python/
+│   │   └── client.py              #   requests-based example (no deps)
+│   ├── typescript/
+│   │   └── client.ts              #   fetch-based example (Node 18+, no deps)
+│   ├── go/
+│   │   └── client.go              #   stdlib-only example
+│   └── configs/                   # JSON extraction-config samples
+│       ├── invoice_config.json
+│       └── cv_config.json
 ├── docker/
 │   ├── Dockerfile                 # Multi-stage build
 │   └── entrypoint.sh              # web / worker / flower / beat

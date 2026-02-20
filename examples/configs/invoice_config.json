@@ -1,5 +1,5 @@
 {
-  "document_url": "https://example.com/invoice-001.pdf",
+  "document_url": "https://example.com/invoice-001.txt",
   "provider": "gpt-4o",
   "passes": 1,
   "extraction_config": {

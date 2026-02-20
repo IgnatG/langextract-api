@@ -8,7 +8,7 @@ Common patterns and usage examples for the LangExtract API.
 curl -X POST http://localhost:8000/api/v1/extract \
   -H "Content-Type: application/json" \
   -d '{
-    "document_url": "https://example.com/contract.pdf",
+    "document_url": "https://storage.example.com/contracts/agreement-2025.txt",
     "provider": "gpt-4o",
     "passes": 2
   }'
@@ -36,8 +36,8 @@ curl -X POST http://localhost:8000/api/v1/extract/batch \
     "batch_id": "invoices-q1",
     "callback_url": "https://yourapp.example.com/webhooks/batch",
     "documents": [
-      {"document_url": "https://example.com/inv-001.pdf"},
-      {"document_url": "https://example.com/inv-002.pdf"},
+      {"document_url": "https://storage.example.com/invoices/inv-001.txt"},
+      {"document_url": "https://storage.example.com/invoices/inv-002.txt"},
       {"raw_text": "Invoice #003 ..."}
     ]
   }'
