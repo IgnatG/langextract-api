@@ -116,6 +116,43 @@ class TestModelCaching:
         assert m1 is not m2
         assert mock_create.call_count == 2
 
+    def test_response_format_creates_distinct_entry(self):
+        """Passing ``response_format`` should create a distinct cache entry."""
+        manager = ProviderManager.instance()
+        rf = {"type": "json_schema", "json_schema": {"name": "test"}}
+        with mock.patch(
+            "app.services.provider_manager.factory.create_model"
+        ) as mock_create:
+            mock_create.side_effect = [mock.MagicMock(), mock.MagicMock()]
+
+            m1 = manager.get_or_create_model("gpt-4o", api_key="k1")
+            m2 = manager.get_or_create_model(
+                "gpt-4o",
+                api_key="k1",
+                response_format=rf,
+            )
+
+        assert m1 is not m2
+        assert mock_create.call_count == 2
+
+    def test_response_format_forwarded_to_provider_kwargs(self):
+        """``response_format`` should appear in the model config."""
+        manager = ProviderManager.instance()
+        rf = {"type": "json_schema", "json_schema": {"name": "test"}}
+        with mock.patch(
+            "app.services.provider_manager.factory.create_model"
+        ) as mock_create:
+            mock_create.return_value = mock.MagicMock()
+            manager.get_or_create_model(
+                "gpt-4o",
+                api_key="k1",
+                response_format=rf,
+            )
+
+        call_args = mock_create.call_args
+        config = call_args.kwargs.get("config") or call_args[1].get("config")
+        assert config.provider_kwargs["response_format"] == rf
+
     def test_clear_empties_cache(self):
         manager = ProviderManager.instance()
         with mock.patch(

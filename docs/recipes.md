@@ -167,3 +167,42 @@ curl -X POST http://localhost:8000/api/v1/extract \
     }
   }'
 ```
+
+## Structured Output (response_format)
+
+Force the LLM to return valid JSON matching a schema derived from your examples.
+This eliminates malformed-JSON parse failures and improves extraction consistency.
+
+By default (`structured_output: null`), the API auto-detects whether the
+provider supports `response_format` and enables it when available.  You can
+force it on or off explicitly:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/extract \
+  -H "Content-Type: application/json" \
+  -d '{
+    "raw_text": "AGREEMENT between Acme Corp and Beta LLC dated Jan 1 2025 for $50,000.",
+    "extraction_config": {
+      "structured_output": true,
+      "examples": [
+        {
+          "text": "Contract between X Corp and Y Inc dated Dec 15 2024",
+          "extractions": [
+            {"extraction_class": "party", "extraction_text": "X Corp"},
+            {"extraction_class": "party", "extraction_text": "Y Inc"},
+            {"extraction_class": "date", "extraction_text": "Dec 15 2024"}
+          ]
+        }
+      ]
+    }
+  }'
+```
+
+> **Notes:**
+>
+> - Requires examples in `extraction_config` — the JSON Schema is built from
+>   them automatically.
+> - `fence_output` is forced to `false` when `response_format` is active (the
+>   LLM returns raw JSON, not fenced code blocks).
+> - Works with any LiteLLM-supported provider that supports
+>   `response_format` (OpenAI, Azure, Gemini, Anthropic, etc.).

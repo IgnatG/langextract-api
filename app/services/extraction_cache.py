@@ -34,6 +34,7 @@ Select via ``EXTRACTION_CACHE_BACKEND`` env-var.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -220,7 +221,7 @@ class _DiskBackend(_CacheBackend):
 
     def __init__(self) -> None:
         try:
-            import diskcache  # noqa: F401
+            import diskcache
         except ImportError as exc:
             raise ImportError(
                 "diskcache is required for the 'disk' cache backend. "
@@ -286,10 +287,8 @@ class _DiskBackend(_CacheBackend):
 
     def close(self) -> None:
         """Close the underlying diskcache store."""
-        try:
+        with contextlib.suppress(Exception):
             self._cache.close()
-        except Exception:
-            pass
 
 
 # ── Facade ──────────────────────────────────────────────────
@@ -354,7 +353,7 @@ class ExtractionCache:
             if not cache_enabled or backend_name == "none":
                 cls._instance = cls(backend=None)
                 logger.info(
-                    "Extraction cache disabled " "(enabled=%s, backend=%s)",
+                    "Extraction cache disabled (enabled=%s, backend=%s)",
                     cache_enabled,
                     backend_name,
                 )

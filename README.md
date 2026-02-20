@@ -338,6 +338,24 @@ Override per-request via `extraction_config`:
 | `context_window_chars`   | `int`        | Context window size in characters                                      |
 | `consensus_providers`    | `list[str]`  | ≥ 2 model IDs for consensus mode (e.g. `["gpt-4o", "gemini-2.5-pro"]`)  |
 | `consensus_threshold`    | `float`      | Similarity threshold for consensus agreement (0.0–1.0, default 0.6)   |
+| `structured_output`      | `bool\|null` | Enable/disable LLM-level `response_format` (default `null` = auto-detect) |
+
+### Structured Output (response_format)
+
+When the LLM provider supports JSON Schema constraints (OpenAI, Anthropic,
+Gemini 2.0+, Groq, etc.), the API auto-generates a schema from the extraction
+examples and passes it as `response_format` to `litellm.completion()`.  This
+guarantees the LLM output is valid JSON matching the extraction format,
+eliminating parse errors.
+
+| `structured_output` value | Behaviour                                                    |
+|---------------------------|--------------------------------------------------------------|
+| `null` (default)          | Auto-detect — enabled when `litellm.supports_response_schema()` returns `true` |
+| `true`                    | Force on (will error if the provider doesn't support it)     |
+| `false`                   | Force off — use prompt-only extraction (legacy behaviour)    |
+
+> **Note:** When structured output is active, `fence_output` is automatically
+> set to `false` because the LLM returns raw JSON instead of fenced code blocks.
 
 To change the **global** defaults, edit `app/core/defaults.py`.
 
@@ -435,6 +453,7 @@ langextract-api/
 │   │   ├── extractor.py           # LangExtract extraction business logic
 │   │   ├── provider_manager.py    # Singleton model cache & LiteLLM Redis setup
 │   │   ├── providers.py           # LLM provider factory
+│   │   ├── structured_output.py   # JSON Schema builder for response_format
 │   │   └── webhook.py             # Result persistence & webhook delivery
 │   ├── workers/
 │   │   ├── celery_app.py          # Celery app configuration

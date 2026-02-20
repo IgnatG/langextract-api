@@ -24,7 +24,6 @@ from app.services.extraction_cache import (
     build_cache_key,
 )
 
-
 # ── Fixtures ────────────────────────────────────────────────
 
 

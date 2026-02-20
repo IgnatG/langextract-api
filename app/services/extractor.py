@@ -46,6 +46,10 @@ from app.services.extraction_cache import (
 )
 from app.services.provider_manager import ProviderManager
 from app.services.providers import is_openai_model, resolve_api_key
+from app.services.structured_output import (
+    build_response_format,
+    supports_structured_output,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +65,7 @@ def _build_model(
     extraction_config: dict[str, Any],
     manager: ProviderManager,
     examples: Any = None,
+    response_format: dict[str, Any] | None = None,
 ) -> tuple[BaseLanguageModel, str]:
     """Build a language model, optionally wrapped for consensus.
 
@@ -75,6 +80,10 @@ def _build_model(
             ``consensus_providers`` (list of model ID strings).
         manager: The global ``ProviderManager`` singleton.
         examples: Example data for schema generation.
+        response_format: Optional ``response_format`` dict to
+            pass through to the LiteLLM provider.  When set,
+            ``fence_output`` is forced to ``False`` because the
+            LLM returns raw JSON (no code fences).
 
     Returns:
         A ``(model, label)`` tuple where *label* is a
@@ -89,6 +98,11 @@ def _build_model(
             extra: dict[str, Any] = {}
             if is_openai_model(model_id):
                 extra["fence_output"] = True
+            # When response_format is active, override fence_output
+            # because the LLM returns raw JSON instead of fenced
+            # code blocks.
+            if response_format is not None:
+                extra["fence_output"] = False
             models.append(
                 manager.get_or_create_model(
                     model_id=model_id,
@@ -96,6 +110,7 @@ def _build_model(
                     fence_output=extra.get("fence_output"),
                     use_schema_constraints=not is_openai_model(model_id),
                     examples=examples,
+                    response_format=response_format,
                 )
             )
 
@@ -118,6 +133,10 @@ def _build_model(
     extra_kwargs: dict[str, Any] = {}
     if is_openai_model(provider):
         extra_kwargs["fence_output"] = True
+    # When response_format is active, override fence_output to
+    # False — the LLM returns raw JSON, not fenced code blocks.
+    if response_format is not None:
+        extra_kwargs["fence_output"] = False
 
     model = manager.get_or_create_model(
         model_id=provider,
@@ -125,6 +144,7 @@ def _build_model(
         fence_output=extra_kwargs.get("fence_output"),
         use_schema_constraints=not is_openai_model(provider),
         examples=examples,
+        response_format=response_format,
     )
     return model, provider
 
@@ -300,11 +320,33 @@ def run_extraction(
     if passes <= 1:
         manager.ensure_cache()
 
+    # ── Step 3a: Resolve structured output ──────────────────
+    # When the caller has not explicitly opted out AND the
+    # provider advertises JSON Schema support, build a
+    # ``response_format`` dict so the LLM is constrained to
+    # valid JSON matching the extraction schema.
+    structured_output_flag: bool | None = extraction_config.get(
+        "structured_output",
+    )
+    response_format: dict[str, Any] | None = None
+    if structured_output_flag is not False and (
+        structured_output_flag is True or supports_structured_output(provider)
+    ):
+        response_format = build_response_format(
+            extraction_config.get("examples", DEFAULT_EXAMPLES),
+        )
+        logger.info(
+            "Structured output enabled for %s (response_format type=%s)",
+            provider,
+            response_format.get("type"),
+        )
+
     cached_model, model_label = _build_model(
         provider,
         extraction_config,
         manager,
         examples=examples,
+        response_format=response_format,
     )
 
     extract_kwargs: dict[str, Any] = {
@@ -554,11 +596,29 @@ async def async_run_extraction(
     if passes <= 1:
         manager.ensure_cache()
 
+    # ── Step 3a: Resolve structured output (async) ──────────
+    structured_output_flag_async: bool | None = extraction_config.get(
+        "structured_output",
+    )
+    response_format_async: dict[str, Any] | None = None
+    if structured_output_flag_async is not False and (
+        structured_output_flag_async is True or supports_structured_output(provider)
+    ):
+        response_format_async = build_response_format(
+            extraction_config.get("examples", DEFAULT_EXAMPLES),
+        )
+        logger.info(
+            "Structured output enabled (async) for %s (response_format type=%s)",
+            provider,
+            response_format_async.get("type"),
+        )
+
     cached_model, model_label = _build_model(
         provider,
         extraction_config,
         manager,
         examples=examples,
+        response_format=response_format_async,
     )
 
     extract_kwargs: dict[str, Any] = {

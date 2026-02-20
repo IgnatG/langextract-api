@@ -118,14 +118,19 @@ class ProviderManager:
         api_key: str | None,
         fence_output: bool | None = None,
         use_schema_constraints: bool = True,
+        has_response_format: bool = False,
     ) -> str:
         """Deterministic cache key for a model configuration.
 
-        Includes ``fence_output`` and ``use_schema_constraints``
-        so that the same ``(model_id, api_key)`` pair with
-        different schema settings produces distinct cache entries.
+        Includes ``fence_output``, ``use_schema_constraints``, and
+        ``has_response_format`` so that the same ``(model_id,
+        api_key)`` pair with different schema or structured-output
+        settings produces distinct cache entries.
         """
-        raw = f"{model_id}:{api_key or ''}:{fence_output}:{use_schema_constraints}"
+        raw = (
+            f"{model_id}:{api_key or ''}:{fence_output}"
+            f":{use_schema_constraints}:{has_response_format}"
+        )
         return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
     def get_or_create_model(
@@ -136,6 +141,7 @@ class ProviderManager:
         fence_output: bool | None = None,
         use_schema_constraints: bool = True,
         examples: Any = None,
+        response_format: dict[str, Any] | None = None,
         **extra_kwargs: Any,
     ) -> BaseLanguageModel:
         """Return a cached model or create and cache a new one.
@@ -146,6 +152,9 @@ class ProviderManager:
             fence_output: Whether to force fenced output.
             use_schema_constraints: Whether to apply schema constraints.
             examples: Example data for schema generation.
+            response_format: Optional ``response_format`` dict
+                to include in calls to ``litellm.completion()``.
+                Stored as a provider kwarg on the model.
             **extra_kwargs: Forwarded to ``factory.create_model``.
 
         Returns:
@@ -157,6 +166,7 @@ class ProviderManager:
             api_key,
             fence_output=fence_output,
             use_schema_constraints=use_schema_constraints,
+            has_response_format=response_format is not None,
         )
 
         with self._model_lock:
@@ -167,6 +177,8 @@ class ProviderManager:
         provider_kwargs: dict[str, Any] = {}
         if api_key:
             provider_kwargs["api_key"] = api_key
+        if response_format is not None:
+            provider_kwargs["response_format"] = response_format
         provider_kwargs.update(extra_kwargs)
 
         config = factory.ModelConfig(

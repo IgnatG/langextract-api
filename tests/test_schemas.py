@@ -83,6 +83,23 @@ class TestExtractionConfig:
         with pytest.raises(ValidationError):
             ExtractionConfig(consensus_threshold=1.5)
 
+    def test_structured_output_default_none(self):
+        """structured_output defaults to None."""
+        cfg = ExtractionConfig()
+        assert cfg.structured_output is None
+        assert "structured_output" not in cfg.to_flat_dict()
+
+    def test_structured_output_true(self):
+        """structured_output=True is accepted and round-trips."""
+        cfg = ExtractionConfig(structured_output=True)
+        assert cfg.structured_output is True
+        assert cfg.to_flat_dict()["structured_output"] is True
+
+    def test_structured_output_false(self):
+        """structured_output=False explicitly disables structured output."""
+        cfg = ExtractionConfig(structured_output=False)
+        assert cfg.structured_output is False
+
 
 # ── ExtractionRequest ──────────────────────────────────────
 

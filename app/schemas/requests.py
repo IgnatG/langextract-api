@@ -138,6 +138,22 @@ class ExtractionConfig(BaseModel):
             "in agreement (default 0.6)."
         ),
     )
+    structured_output: bool | None = Field(
+        default=None,
+        description=(
+            "Enable LLM-level structured output (``response_format``) "
+            "for providers that support JSON Schema constraints "
+            "(OpenAI, Anthropic, Gemini 2.0+, etc.).  When ``True``, "
+            "a JSON Schema is auto-generated from the extraction "
+            "examples and passed to the LLM so its output is "
+            "guaranteed to be valid JSON matching the extraction "
+            "format — eliminating parse errors and improving "
+            "reliability.  When ``None`` (default), structured "
+            "output is enabled automatically for supported "
+            "providers.  Set to ``False`` to force prompt-only "
+            "extraction."
+        ),
+    )
 
     def to_flat_dict(self) -> dict[str, Any]:
         """Return a dict with only non-None values.
