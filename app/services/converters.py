@@ -78,8 +78,10 @@ def convert_extractions(
         }
         # Include cross-pass confidence score when available
         # (multi-pass extraction with total_passes > 1).
+        # Round to 2 decimal places when below 1.0 for cleaner output.
         if getattr(ext, "confidence_score", None) is not None:
-            entity["confidence_score"] = ext.confidence_score
+            score = ext.confidence_score
+            entity["confidence_score"] = score if score >= 1.0 else round(score, 2)
         entities.append(entity)
     return entities
 
