@@ -100,6 +100,11 @@ curl -X POST http://localhost:8000/api/v1/extract \
 Run multiple extraction passes to get a `confidence_score` (0.0–1.0) on every entity.  Higher values mean the entity was found consistently across passes.
 Early stopping kicks in automatically when consecutive passes yield identical results, so extra passes cost nothing when the model is already stable.
 
+> **Cache interaction:** The first pass may be served from the LiteLLM Redis
+> cache (fast, zero cost). Passes ≥ 2 **always bypass** the LLM response cache
+> so that each subsequent pass produces a genuinely independent extraction. This
+> is handled automatically by the `langextract-litellm` provider.
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/extract \
   -H "Content-Type: application/json" \

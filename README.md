@@ -369,6 +369,12 @@ The API implements a two-tier caching strategy for extraction cost-control and f
 
 Enabled automatically via `ProviderManager.ensure_cache()`. Every `litellm.completion()` call is cached in Redis, keyed by the full request parameters (prompt, model, temperature). Identical LLM prompts hit the cache directly — no API cost.
 
+> **Multi-pass bypass:** When `passes > 1`, only the first pass (pass 0) is
+> served from the LiteLLM cache. Passes ≥ 2 automatically include
+> `cache={"no-cache": True}` so each subsequent pass gets a fresh LLM response.
+> This is handled transparently by the `langextract-litellm` provider via the
+> `pass_num` kwarg that LangExtract threads through the annotation loop.
+
 ### Tier 2 — Extraction-Result Cache
 
 An **extraction-result-level** cache that sits above the LLM layer. When a document is extracted with the same text, prompt, examples, model, temperature, and passes, the complete result (entities + metadata) is returned from cache in < 500 ms with zero API cost.
