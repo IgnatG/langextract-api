@@ -213,14 +213,16 @@ All settings are driven by environment variables (`.env` file supported):
 
 ### LLM / Extraction
 
-| Variable                 | Default   | Description                                      |
-|--------------------------|-----------|--------------------------------------------------|
-| `DEFAULT_PROVIDER`       | gpt-4o    | Default model (overridable per-request)          |
-| `DEFAULT_MAX_WORKERS`    | 10        | LangExtract parallel workers                     |
-| `DEFAULT_MAX_CHAR_BUFFER`| 1000      | LangExtract character buffer                     |
-| `OPENAI_API_KEY`         | _(empty)_ | OpenAI key (for GPT models)                      |
-| `GEMINI_API_KEY`         | _(empty)_ | Google Gemini key                                |
-| `LANGEXTRACT_API_KEY`    | _(empty)_ | Dedicated key (falls back to `GEMINI_API_KEY`)   |
+| Variable                   | Default   | Description                                      |
+|----------------------------|-----------|--------------------------------------------------|
+| `DEFAULT_PROVIDER`         | gpt-4o    | Default model (overridable per-request)          |
+| `DEFAULT_MAX_WORKERS`      | 10        | LangExtract parallel workers                     |
+| `DEFAULT_MAX_CHAR_BUFFER`  | 1000      | LangExtract character buffer                     |
+| `OPENAI_API_KEY`           | _(empty)_ | OpenAI key (for GPT models)                      |
+| `GEMINI_API_KEY`           | _(empty)_ | Google Gemini key                                |
+| `LANGEXTRACT_API_KEY`      | _(empty)_ | Dedicated key (falls back to `GEMINI_API_KEY`)   |
+| `EXTRACTION_CACHE_ENABLED` | true      | Enable LLM response caching via Redis            |
+| `EXTRACTION_CACHE_TTL`     | 86400     | Cache TTL in seconds (default 24 h)              |
 
 ### Security
 

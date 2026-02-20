@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -13,7 +14,7 @@ from app.core.config import get_settings
 from app.core.constants import REDIS_PREFIX_TASK_RESULT
 from app.core.metrics import record_task_completed
 from app.core.redis import get_redis_client
-from app.services.extractor import run_extraction
+from app.services.extractor import async_run_extraction
 from app.services.webhook import fire_webhook
 from app.workers.celery_app import celery_app
 
@@ -87,13 +88,19 @@ def extract_document(
     """
     start_s = time.monotonic()
     try:
-        result = run_extraction(
-            task_self=self,
-            document_url=document_url,
-            raw_text=raw_text,
-            provider=provider,
-            passes=passes,
-            extraction_config=extraction_config,
+        # Use the async extraction path to enable I/O-CPU overlap
+        # via ``lx.async_extract()`` and ``litellm.acompletion()``.
+        # ``asyncio.run()`` is safe here because Celery worker threads
+        # do not have a running event loop.
+        result = asyncio.run(
+            async_run_extraction(
+                task_self=self,
+                document_url=document_url,
+                raw_text=raw_text,
+                provider=provider,
+                passes=passes,
+                extraction_config=extraction_config,
+            )
         )
         elapsed_s = time.monotonic() - start_s
 

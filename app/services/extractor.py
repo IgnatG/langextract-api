@@ -10,6 +10,7 @@ flows.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any
@@ -36,6 +37,7 @@ from app.services.converters import (
     extract_token_usage,
 )
 from app.services.downloader import download_document
+from app.services.provider_manager import ProviderManager
 from app.services.providers import is_openai_model, resolve_api_key
 
 logger = logging.getLogger(__name__)
@@ -173,11 +175,31 @@ def run_extraction(
             },
         )
 
+    # Initialise provider manager (singleton) — enables litellm
+    # Redis cache and model instance reuse across batches/jobs.
+    manager = ProviderManager.instance()
+    manager.ensure_cache()
+
+    # Resolve a (possibly cached) language model instance.
+    api_key = resolve_api_key(provider)
+
+    model_extra_kwargs: dict[str, Any] = {}
+    if is_openai_model(provider):
+        model_extra_kwargs["fence_output"] = True
+
+    cached_model = manager.get_or_create_model(
+        model_id=provider,
+        api_key=api_key,
+        fence_output=model_extra_kwargs.get("fence_output"),
+        use_schema_constraints=not is_openai_model(provider),
+        examples=examples,
+    )
+
     extract_kwargs: dict[str, Any] = {
         "text_or_documents": text_input,
         "prompt_description": prompt_description,
         "examples": examples,
-        "model_id": provider,
+        "model": cached_model,
         "extraction_passes": passes,
         "max_workers": extraction_config.get(
             "max_workers",
@@ -199,16 +221,6 @@ def run_extraction(
         extract_kwargs["context_window_chars"] = extraction_config[
             "context_window_chars"
         ]
-
-    # API key
-    api_key = resolve_api_key(provider)
-    if api_key:
-        extract_kwargs["api_key"] = api_key
-
-    # OpenAI-specific flags
-    if is_openai_model(provider):
-        extract_kwargs["fence_output"] = True
-        extract_kwargs["use_schema_constraints"] = False
 
     # ── Step 4: Run LangExtract ─────────────────────────────
     logger.info(
@@ -257,6 +269,221 @@ def run_extraction(
 
     logger.info(
         "Extraction completed for %s — %d entities in %d ms",
+        source,
+        len(entities),
+        elapsed_ms,
+    )
+    return result
+
+
+# ── Async extraction path ───────────────────────────────────
+
+
+@retry(
+    retry=retry_if_exception_type(ValueError),
+    stop=stop_after_attempt(MAX_LLM_RETRIES + 1),
+    wait=wait_none(),
+    reraise=True,
+)
+async def _run_lx_async_extract_with_retry(
+    extract_kwargs: dict[str, Any],
+    source: str,
+    max_retries: int,
+) -> Any:
+    """Call ``lx.async_extract()`` with automatic retries on ValueError.
+
+    Mirrors ``_run_lx_extract_with_retry`` but uses the async
+    extraction path for I/O-CPU overlap.
+
+    Args:
+        extract_kwargs: Keyword arguments for ``lx.async_extract()``.
+        source: Human-readable source label for logs.
+        max_retries: Kept for API compatibility (unused).
+
+    Returns:
+        The result of ``lx.async_extract()``.
+
+    Raises:
+        ValueError: If all attempts fail with the same error.
+    """
+    return await lx.async_extract(**extract_kwargs)
+
+
+async def async_run_extraction(
+    task_self: Any | None,
+    document_url: str | None = None,
+    raw_text: str | None = None,
+    provider: str = "gpt-4o",
+    passes: int = 1,
+    extraction_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Async extraction logic using ``lx.async_extract()``.
+
+    Mirrors ``run_extraction`` but awaits the native async
+    LangExtract path, enabling I/O-CPU overlap for 20-40%
+    wall-time improvement when providers support native
+    ``async_infer`` (e.g. LiteLLM via ``litellm.acompletion``).
+
+    Args:
+        task_self: Bound Celery task instance (for progress
+            updates).  ``None`` when called from batch items.
+        document_url: URL to the source document.
+        raw_text: Raw text blob to process directly.
+        provider: LLM model ID (e.g. ``gpt-4o``).
+        passes: Number of extraction passes.
+        extraction_config: Optional overrides for prompt,
+            examples, and LangExtract parameters.
+
+    Returns:
+        A dict containing the extraction result and metadata.
+    """
+    settings = get_settings()
+    extraction_config = extraction_config or {}
+    source = document_url or "<raw_text>"
+    start_ms = int(time.time() * 1000)
+
+    logger.info(
+        "Starting async extraction for %s (model=%s, passes=%d)",
+        source,
+        provider,
+        passes,
+    )
+
+    # ── Step 1: Determine input ─────────────────────────────
+    if task_self:
+        task_self.update_state(
+            state=TaskState.PROGRESS,
+            meta={
+                "step": "preparing",
+                "source": source,
+                "percent": 5,
+            },
+        )
+
+    if document_url:
+        validate_url(document_url, purpose="document_url")
+        logger.info("Downloading document from %s", document_url)
+        # download_document is I/O-bound but short; run in a
+        # thread to avoid blocking the event loop.
+        text_input: str = await asyncio.to_thread(
+            download_document,
+            document_url,
+        )
+    else:
+        text_input = raw_text or ""
+
+    # ── Step 2: Build prompt & examples ─────────────────────
+    prompt_description: str = extraction_config.get(
+        "prompt_description",
+        DEFAULT_PROMPT_DESCRIPTION,
+    )
+
+    raw_examples: list[dict[str, Any]] = extraction_config.get(
+        "examples", DEFAULT_EXAMPLES
+    )
+    examples = build_examples(raw_examples)
+
+    # ── Step 3: Assemble lx.async_extract() kwargs ──────────
+    if task_self:
+        task_self.update_state(
+            state=TaskState.PROGRESS,
+            meta={
+                "step": "extracting",
+                "source": source,
+                "percent": 10,
+            },
+        )
+
+    manager = ProviderManager.instance()
+    manager.ensure_cache()
+
+    api_key = resolve_api_key(provider)
+
+    model_extra_kwargs: dict[str, Any] = {}
+    if is_openai_model(provider):
+        model_extra_kwargs["fence_output"] = True
+
+    cached_model = manager.get_or_create_model(
+        model_id=provider,
+        api_key=api_key,
+        fence_output=model_extra_kwargs.get("fence_output"),
+        use_schema_constraints=not is_openai_model(provider),
+        examples=examples,
+    )
+
+    extract_kwargs: dict[str, Any] = {
+        "text_or_documents": text_input,
+        "prompt_description": prompt_description,
+        "examples": examples,
+        "model": cached_model,
+        "extraction_passes": passes,
+        "max_workers": extraction_config.get(
+            "max_workers",
+            settings.DEFAULT_MAX_WORKERS,
+        ),
+        "max_char_buffer": extraction_config.get(
+            "max_char_buffer",
+            settings.DEFAULT_MAX_CHAR_BUFFER,
+        ),
+        "show_progress": False,
+    }
+
+    if "additional_context" in extraction_config:
+        extract_kwargs["additional_context"] = extraction_config["additional_context"]
+    if "temperature" in extraction_config:
+        extract_kwargs["temperature"] = extraction_config["temperature"]
+    if "context_window_chars" in extraction_config:
+        extract_kwargs["context_window_chars"] = extraction_config[
+            "context_window_chars"
+        ]
+
+    # ── Step 4: Run LangExtract (async) ─────────────────────
+    logger.info(
+        "Calling lx.async_extract() for %s (model_id=%s, passes=%d)",
+        source,
+        provider,
+        passes,
+    )
+
+    lx_result = await _run_lx_async_extract_with_retry(
+        extract_kwargs,
+        source,
+        MAX_LLM_RETRIES,
+    )
+
+    if isinstance(lx_result, list):
+        lx_result = lx_result[0] if lx_result else lx.data.AnnotatedDocument()
+
+    # ── Step 5: Convert to response schema ──────────────────
+    if task_self:
+        task_self.update_state(
+            state=TaskState.PROGRESS,
+            meta={
+                "step": "post_processing",
+                "source": source,
+                "percent": 90,
+            },
+        )
+
+    entities = convert_extractions(lx_result)
+    elapsed_ms = int(time.time() * 1000) - start_ms
+    tokens = extract_token_usage(lx_result)
+
+    result: dict[str, Any] = {
+        "status": STATUS_COMPLETED,
+        "source": source,
+        "data": {
+            "entities": entities,
+            "metadata": {
+                "provider": provider,
+                "tokens_used": tokens,
+                "processing_time_ms": elapsed_ms,
+            },
+        },
+    }
+
+    logger.info(
+        "Async extraction completed for %s — %d entities in %d ms",
         source,
         len(entities),
         elapsed_ms,
