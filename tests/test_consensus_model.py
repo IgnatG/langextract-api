@@ -9,10 +9,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterator, Sequence
 from typing import Any
-from unittest import mock
 
 import pytest
-
 from langextract.core.base_model import BaseLanguageModel
 from langextract.core.types import ScoredOutput
 
@@ -21,7 +19,6 @@ from app.services.consensus_model import (
     _jaccard_similarity,
     _select_consensus_output,
 )
-
 
 # ── Helpers ─────────────────────────────────────────────────
 
@@ -100,7 +97,7 @@ class TestSelectConsensusOutput:
         assert score == 0.0
 
     def test_unanimous_agreement(self):
-        chosen, score = _select_consensus_output(
+        _chosen, score = _select_consensus_output(
             ["hello world", "hello world", "hello world"]
         )
         assert score == 1.0

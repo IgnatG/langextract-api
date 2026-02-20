@@ -105,8 +105,7 @@ class ProviderManager:
             )
         except Exception:
             logger.warning(
-                "Failed to initialise LiteLLM Redis cache — "
-                "continuing without caching",
+                "Failed to initialise LiteLLM Redis cache — continuing without caching",
                 exc_info=True,
             )
             self._cache_initialized = True
@@ -126,7 +125,7 @@ class ProviderManager:
         so that the same ``(model_id, api_key)`` pair with
         different schema settings produces distinct cache entries.
         """
-        raw = f"{model_id}:{api_key or ''}" f":{fence_output}:{use_schema_constraints}"
+        raw = f"{model_id}:{api_key or ''}:{fence_output}:{use_schema_constraints}"
         return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
     def get_or_create_model(

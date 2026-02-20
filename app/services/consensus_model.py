@@ -3,7 +3,7 @@ Consensus language model wrapper for cross-provider agreement.
 
 Dispatches the same prompt to multiple LLM providers and
 returns only the output that achieves majority agreement,
-improving extraction determinism at the cost of N× API calls
+improving extraction determinism at the cost of Nx API calls
 (where N is the number of consensus providers).
 
 This is an opt-in "high-confidence" mode — it should NOT be
@@ -173,8 +173,7 @@ class ConsensusLanguageModel(BaseLanguageModel):
         super().__init__(**kwargs)
         if len(models) < 2:
             raise ValueError(
-                "ConsensusLanguageModel requires at least 2 models, "
-                f"got {len(models)}."
+                f"ConsensusLanguageModel requires at least 2 models, got {len(models)}."
             )
         self._models = models
         self._threshold = similarity_threshold
@@ -207,8 +206,7 @@ class ConsensusLanguageModel(BaseLanguageModel):
                 all_model_results.append(list(model.infer(batch_prompts, **kwargs)))
             except Exception:
                 logger.warning(
-                    "Consensus model %s failed during infer; "
-                    "skipping this provider.",
+                    "Consensus model %s failed during infer; skipping this provider.",
                     getattr(model, "model_id", "unknown"),
                     exc_info=True,
                 )

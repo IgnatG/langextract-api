@@ -1173,7 +1173,7 @@ redis = [
 [[package]]
 name = "langextract"
 version = "1.1.1"
-source = { git = "https://github.com/IgnatG/langextract.git?rev=async#a29b018524becb60b647d741163eac310a8e2c7e" }
+source = { git = "https://github.com/IgnatG/langextract.git?rev=develop#446731a8781ebac49b76f12bf82a4eff5146a090" }
 dependencies = [
     { name = "absl-py" },
     { name = "aiohttp" },
@@ -1235,7 +1235,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.129.0" },
     { name = "flower", specifier = ">=2.0.1" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "langextract", extras = ["openai"], git = "https://github.com/IgnatG/langextract.git?rev=async" },
+    { name = "langextract", extras = ["openai"], git = "https://github.com/IgnatG/langextract.git?rev=develop" },
     { name = "langextract-litellm", git = "https://github.com/IgnatG/langextract-litellm.git?rev=develop" },
     { name = "prometheus-client", specifier = ">=0.22.0" },
     { name = "prometheus-fastapi-instrumentator", specifier = ">=7.0.2" },

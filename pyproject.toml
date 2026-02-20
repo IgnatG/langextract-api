@@ -12,7 +12,7 @@ dependencies = [
     "redis>=5.0.3,<6.5",
     "httpx>=0.28.1",
     "flower>=2.0.1",
-    "langextract[openai] @ git+https://github.com/IgnatG/langextract.git@async",
+    "langextract[openai] @ git+https://github.com/IgnatG/langextract.git@develop",
     "langextract-litellm @ git+https://github.com/IgnatG/langextract-litellm.git@develop",
     "prometheus-client>=0.22.0",
     "prometheus-fastapi-instrumentator>=7.0.2",

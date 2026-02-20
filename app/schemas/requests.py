@@ -126,7 +126,7 @@ class ExtractionConfig(BaseModel):
         description=(
             "Two or more LLM model IDs to use for consensus extraction. "
             "When set, the response with the highest cross-model agreement "
-            "is kept. Costs N× API calls."
+            "is kept. Costs Nx API calls."
         ),
     )
     consensus_threshold: float | None = Field(

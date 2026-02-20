@@ -101,7 +101,7 @@ def _build_model(
         )
         label = f"consensus({', '.join(consensus_providers)})"
         logger.info(
-            "Built consensus model with %d providers: %s " "(threshold=%.2f)",
+            "Built consensus model with %d providers: %s (threshold=%.2f)",
             len(consensus_providers),
             label,
             threshold,
