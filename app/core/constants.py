@@ -21,6 +21,9 @@ REDIS_PREFIX_IDEMPOTENCY: str = "idempotency:"
 REDIS_PREFIX_METRICS: str = "metrics:"
 """Prefix for atomic metric counters."""
 
+REDIS_PREFIX_EXTRACTION_CACHE: str = "extraction_cache:"
+"""Prefix for extraction-result cache entries."""
+
 
 # ── Task / result status strings ────────────────────────────────────────────
 # Used in Celery ``update_state()`` calls and in result dicts

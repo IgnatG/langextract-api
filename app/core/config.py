@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     # ── Batch concurrency ───────────────────────────────────────────
     BATCH_CONCURRENCY: int = 4
 
+    # ── Extraction-result cache ─────────────────────────────────────
+    EXTRACTION_CACHE_ENABLED: bool = True
+    EXTRACTION_CACHE_TTL: int = 86400  # seconds (24 h)
+    EXTRACTION_CACHE_BACKEND: str = "redis"  # redis | disk | none
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _parse_cors(cls, v: str | list[str]) -> list[str]:

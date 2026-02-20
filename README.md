@@ -230,6 +230,8 @@ All settings are driven by environment variables (`.env` file supported):
 | `LANGEXTRACT_API_KEY`      | _(empty)_ | Dedicated key (falls back to `GEMINI_API_KEY`)   |
 | `EXTRACTION_CACHE_ENABLED` | true      | Enable LLM response caching via Redis            |
 | `EXTRACTION_CACHE_TTL`     | 86400     | Cache TTL in seconds (default 24 h)              |
+| `EXTRACTION_CACHE_BACKEND` | redis     | Cache backend: `redis`, `disk`, or `none`        |
+| `EXTRACTION_CACHE_DIR`     | .extraction_cache | Directory for disk backend (dev only)    |
 
 ### Security
 
@@ -359,6 +361,52 @@ See [docs/security.md](docs/security.md) for full details.
 
 ---
 
+## Multi-Tier Caching
+
+The API implements a two-tier caching strategy for extraction cost-control and fast re-runs:
+
+### Tier 1 — LLM Response Cache (litellm + Redis)
+
+Enabled automatically via `ProviderManager.ensure_cache()`. Every `litellm.completion()` call is cached in Redis, keyed by the full request parameters (prompt, model, temperature). Identical LLM prompts hit the cache directly — no API cost.
+
+### Tier 2 — Extraction-Result Cache
+
+An **extraction-result-level** cache that sits above the LLM layer. When a document is extracted with the same text, prompt, examples, model, temperature, and passes, the complete result (entities + metadata) is returned from cache in < 500 ms with zero API cost.
+
+**Cache key:** SHA-256 of `text ∥ prompt_description ∥ examples ∥ model_id ∥ temperature ∥ passes ∥ consensus_providers`. Any schema or prompt change automatically invalidates the cache.
+
+**Backends:**
+
+| Backend | Env value | Use case |
+|---------|-----------|----------|
+| `redis` | `EXTRACTION_CACHE_BACKEND=redis` | Default. Cross-worker, cross-job. |
+| `disk`  | `EXTRACTION_CACHE_BACKEND=disk`  | Local dev / offline (uses `diskcache`). |
+| `none`  | `EXTRACTION_CACHE_BACKEND=none`  | Completely disabled. |
+
+**Cache-hit response metadata:**
+
+When a result is served from the extraction cache, the response metadata includes `"cache_hit": true` and reflects the actual wall-clock time (typically < 100 ms):
+
+```json
+{
+  "metadata": {
+    "provider": "gpt-4o",
+    "tokens_used": 0,
+    "processing_time_ms": 42,
+    "cache_hit": true
+  }
+}
+```
+
+**Prometheus metrics:**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `langextract_cache_hits` | counter | Total extraction-cache hits |
+| `langextract_cache_misses` | counter | Total extraction-cache misses |
+
+---
+
 ## Project Structure
 
 ```
@@ -377,6 +425,7 @@ langextract-api/
 │   │   ├── consensus_model.py     # Cross-provider consensus wrapper
 │   │   ├── converters.py          # Input normalisation helpers
 │   │   ├── downloader.py          # URL fetch with SSRF / content guards
+│   │   ├── extraction_cache.py    # Multi-tier extraction-result cache
 │   │   ├── extractor.py           # LangExtract extraction business logic
 │   │   ├── provider_manager.py    # Singleton model cache & LiteLLM Redis setup
 │   │   ├── providers.py           # LLM provider factory

@@ -30,6 +30,7 @@ from app.core.defaults import (
     DEFAULT_EXAMPLES,
     DEFAULT_PROMPT_DESCRIPTION,
 )
+from app.core.metrics import record_cache_hit, record_cache_miss
 from app.core.security import validate_url
 from app.schemas.enums import TaskState
 from app.services.consensus_model import ConsensusLanguageModel
@@ -39,6 +40,10 @@ from app.services.converters import (
     extract_token_usage,
 )
 from app.services.downloader import download_document
+from app.services.extraction_cache import (
+    ExtractionCache,
+    build_cache_key,
+)
 from app.services.provider_manager import ProviderManager
 from app.services.providers import is_openai_model, resolve_api_key
 
@@ -239,6 +244,39 @@ def run_extraction(
     )
     examples = build_examples(raw_examples)
 
+    # ── Step 2b: Check extraction cache ─────────────────────
+    ext_cache = ExtractionCache.instance()
+    cache_key: str | None = None
+
+    if ext_cache.enabled:
+        cache_key = build_cache_key(
+            text=text_input,
+            prompt_description=prompt_description,
+            examples=extraction_config.get("examples", DEFAULT_EXAMPLES),
+            model_id=provider,
+            temperature=extraction_config.get("temperature"),
+            passes=passes,
+            consensus_providers=extraction_config.get(
+                "consensus_providers",
+            ),
+            consensus_threshold=extraction_config.get(
+                "consensus_threshold",
+            ),
+        )
+        cached = ext_cache.get(cache_key)
+        if cached is not None:
+            record_cache_hit()
+            elapsed_ms = int(time.time() * 1000) - start_ms
+            cached["data"]["metadata"]["processing_time_ms"] = elapsed_ms
+            cached["data"]["metadata"]["cache_hit"] = True
+            logger.info(
+                "Extraction cache HIT for %s — returning in %d ms",
+                source,
+                elapsed_ms,
+            )
+            return cached
+        record_cache_miss()
+
     # ── Step 3: Assemble lx.extract() kwargs ────────────────
     if task_self:
         task_self.update_state(
@@ -253,7 +291,14 @@ def run_extraction(
     # Initialise provider manager (singleton) — enables litellm
     # Redis cache and model instance reuse across batches/jobs.
     manager = ProviderManager.instance()
-    manager.ensure_cache()
+    # Only enable the litellm prompt-level cache for single-pass
+    # jobs.  Multi-pass jobs need non-deterministic LLM responses
+    # per pass; the litellm cache would return identical results
+    # for every pass (same prompt → same cache key), defeating
+    # cross-pass diversity.  The ExtractionCache (semantic layer)
+    # still covers cross-job caching for multi-pass results.
+    if passes <= 1:
+        manager.ensure_cache()
 
     cached_model, model_label = _build_model(
         provider,
@@ -340,6 +385,11 @@ def run_extraction(
         len(entities),
         elapsed_ms,
     )
+
+    # ── Step 6: Populate extraction cache ───────────────────
+    if cache_key is not None:
+        ext_cache.put(cache_key, result)
+
     return result
 
 
@@ -450,6 +500,39 @@ async def async_run_extraction(
     )
     examples = build_examples(raw_examples)
 
+    # ── Step 2b: Check extraction cache ─────────────────────
+    ext_cache = ExtractionCache.instance()
+    cache_key: str | None = None
+
+    if ext_cache.enabled:
+        cache_key = build_cache_key(
+            text=text_input,
+            prompt_description=prompt_description,
+            examples=extraction_config.get("examples", DEFAULT_EXAMPLES),
+            model_id=provider,
+            temperature=extraction_config.get("temperature"),
+            passes=passes,
+            consensus_providers=extraction_config.get(
+                "consensus_providers",
+            ),
+            consensus_threshold=extraction_config.get(
+                "consensus_threshold",
+            ),
+        )
+        cached = ext_cache.get(cache_key)
+        if cached is not None:
+            record_cache_hit()
+            elapsed_ms = int(time.time() * 1000) - start_ms
+            cached["data"]["metadata"]["processing_time_ms"] = elapsed_ms
+            cached["data"]["metadata"]["cache_hit"] = True
+            logger.info(
+                "Extraction cache HIT for %s — returning in %d ms",
+                source,
+                elapsed_ms,
+            )
+            return cached
+        record_cache_miss()
+
     # ── Step 3: Assemble lx.async_extract() kwargs ──────────
     if task_self:
         task_self.update_state(
@@ -462,7 +545,14 @@ async def async_run_extraction(
         )
 
     manager = ProviderManager.instance()
-    manager.ensure_cache()
+    # Only enable the litellm prompt-level cache for single-pass
+    # jobs.  Multi-pass jobs need non-deterministic LLM responses
+    # per pass; the litellm cache would return identical results
+    # for every pass (same prompt → same cache key), defeating
+    # cross-pass diversity.  The ExtractionCache (semantic layer)
+    # still covers cross-job caching for multi-pass results.
+    if passes <= 1:
+        manager.ensure_cache()
 
     cached_model, model_label = _build_model(
         provider,
@@ -548,4 +638,9 @@ async def async_run_extraction(
         len(entities),
         elapsed_ms,
     )
+
+    # ── Step 6: Populate extraction cache ───────────────────
+    if cache_key is not None:
+        ext_cache.put(cache_key, result)
+
     return result

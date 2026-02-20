@@ -42,6 +42,8 @@ _SUBMITTED_KEY = f"{REDIS_PREFIX_METRICS}tasks_submitted_total"
 _SUCCEEDED_KEY = f"{REDIS_PREFIX_METRICS}tasks_succeeded_total"
 _FAILED_KEY = f"{REDIS_PREFIX_METRICS}tasks_failed_total"
 _DURATION_KEY = f"{REDIS_PREFIX_METRICS}task_duration_seconds_sum"
+_CACHE_HIT_KEY = f"{REDIS_PREFIX_METRICS}cache_hits_total"
+_CACHE_MISS_KEY = f"{REDIS_PREFIX_METRICS}cache_misses_total"
 
 
 # ── Record helpers (called from any process) ────────────────
@@ -88,6 +90,36 @@ def record_task_completed(
         )
 
 
+def record_cache_hit() -> None:
+    """Increment the extraction-cache hit counter in Redis."""
+    try:
+        client = get_redis_client()
+        try:
+            client.incr(_CACHE_HIT_KEY)
+        finally:
+            client.close()
+    except Exception:
+        logger.warning(
+            "Failed to record cache_hit metric",
+            exc_info=True,
+        )
+
+
+def record_cache_miss() -> None:
+    """Increment the extraction-cache miss counter in Redis."""
+    try:
+        client = get_redis_client()
+        try:
+            client.incr(_CACHE_MISS_KEY)
+        finally:
+            client.close()
+    except Exception:
+        logger.warning(
+            "Failed to record cache_miss metric",
+            exc_info=True,
+        )
+
+
 # ── Prometheus custom collector ─────────────────────────────
 
 
@@ -106,6 +138,8 @@ class CeleryTaskCollector:
         succeeded = 0
         failed = 0
         duration = 0.0
+        cache_hits = 0
+        cache_misses = 0
 
         try:
             client = get_redis_client()
@@ -115,6 +149,8 @@ class CeleryTaskCollector:
                     _SUCCEEDED_KEY,
                     _FAILED_KEY,
                     _DURATION_KEY,
+                    _CACHE_HIT_KEY,
+                    _CACHE_MISS_KEY,
                 )
             finally:
                 client.close()
@@ -122,6 +158,8 @@ class CeleryTaskCollector:
             succeeded = int(vals[1] or 0)
             failed = int(vals[2] or 0)
             duration = float(vals[3] or 0)
+            cache_hits = int(vals[4] or 0)
+            cache_misses = int(vals[5] or 0)
         except Exception:
             logger.warning(
                 "Failed to read metrics from Redis",
@@ -155,6 +193,20 @@ class CeleryTaskCollector:
         )
         g_dur.add_metric([], duration)
         yield g_dur
+
+        c_hits = CounterMetricFamily(
+            "langextract_cache_hits",
+            "Total extraction-cache hits.",
+        )
+        c_hits.add_metric([], cache_hits)
+        yield c_hits
+
+        c_miss = CounterMetricFamily(
+            "langextract_cache_misses",
+            "Total extraction-cache misses.",
+        )
+        c_miss.add_metric([], cache_misses)
+        yield c_miss
 
 
 # ── Shared registry ─────────────────────────────────────────
