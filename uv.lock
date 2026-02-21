@@ -1241,9 +1241,9 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.129.0" },
     { name = "flower", specifier = ">=2.0.1" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "langextract-audit", specifier = ">=1.1.3" },
+    { name = "langextract-audit", specifier = ">=1.1.4" },
     { name = "langextract-core", specifier = ">=1.0.0" },
-    { name = "langextract-guardrails", specifier = ">=1.0.3" },
+    { name = "langextract-guardrails", specifier = ">=1.0.4" },
     { name = "langextract-litellm", git = "https://github.com/IgnatG/langextract-litellm.git?rev=develop" },
     { name = "prometheus-client", specifier = ">=0.22.0" },
     { name = "prometheus-fastapi-instrumentator", specifier = ">=7.0.2" },
@@ -1264,14 +1264,14 @@ dev = [
 
 [[package]]
 name = "langextract-audit"
-version = "1.1.3"
+version = "1.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langextract-core" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ed/dd/cbd9890171f9559de9906eeeb061bfa30e80d8e0bde2c929e39f185683ad/langextract_audit-1.1.3.tar.gz", hash = "sha256:74e6d9f0f95f32a44861b8a732d2db4d5c792c4ad0d4335093380250d70afd1b", size = 17420, upload-time = "2026-02-21T15:37:50.457Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/cd/b14ad23aa0e80760099d01f6f662c20284d3c68af8d8dc8fc370a12c7aa7/langextract_audit-1.1.4.tar.gz", hash = "sha256:575ff3927d67c695e5e35d0481136987c2274e8622c8df5c448283208afa14fa", size = 17934, upload-time = "2026-02-21T18:12:15.984Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a2/9a/22f2dbafacece0af23f4745e36fcfb37af9bf2625376c5b7566df9ba1792/langextract_audit-1.1.3-py3-none-any.whl", hash = "sha256:c80aeb73d7fe9d15d728eafc663bd45bb619e0024050e126054939272b11ca9b", size = 13942, upload-time = "2026-02-21T15:37:49.183Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/29/5857c6f5aa586fe05ceb195e7856da0504f716feca7bb4543fb3feedfb7c/langextract_audit-1.1.4-py3-none-any.whl", hash = "sha256:d5389847db32d01ce5c5ddcbba4149cca66f1f0126144388c50310ff0e78a53a", size = 14255, upload-time = "2026-02-21T18:12:13.84Z" },
 ]
 
 [[package]]
@@ -1306,16 +1306,16 @@ wheels = [
 
 [[package]]
 name = "langextract-guardrails"
-version = "1.0.3"
+version = "1.0.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "json-repair" },
     { name = "jsonschema" },
     { name = "langextract-core" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7e/ce/dcb8d0678c572d5b46feea13ab6bc3ee049dabbdd370e41a064d4c00ae4f/langextract_guardrails-1.0.3.tar.gz", hash = "sha256:8541ee66269bb3864e67dc42c8b4eac3bcaed21df8c1079bcae2bf36134c0176", size = 18583, upload-time = "2026-02-21T15:37:22.292Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f7/fc/c78d3b2714ea19c52ef6e7b4212d613898311b8ec73fb9a72edaf1668449/langextract_guardrails-1.0.4.tar.gz", hash = "sha256:739fc26bd05ebf5b43170b2c67817bd711698a0a45d3281f9b00eae962aae008", size = 18875, upload-time = "2026-02-21T18:12:17.111Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/85/95/fd02e2c826e5e3cc4fdf46d2599e220dc860c7e3f529de9df2be3014eafc/langextract_guardrails-1.0.3-py3-none-any.whl", hash = "sha256:cce8bf0c865d6dde361478f8b400b84553edb9e8efda51dc205478305202812b", size = 14774, upload-time = "2026-02-21T15:37:21.036Z" },
+    { url = "https://files.pythonhosted.org/packages/80/9e/738a00ed82232cffe17319046a77ede0a3487b6a2bb9d1f28b588e9648ca/langextract_guardrails-1.0.4-py3-none-any.whl", hash = "sha256:67a99131ddcff91ef41e87e4bbd219a5b7b2d6643cbacc358000aa4667ed944c", size = 14854, upload-time = "2026-02-21T18:12:14.343Z" },
 ]
 
 [[package]]
