@@ -12,7 +12,6 @@ x-dev-common: &dev-common
     context: .
     dockerfile: docker/Dockerfile
     target: dev
-  image: langextract:dev
   volumes:
     - .:/app
   env_file:
