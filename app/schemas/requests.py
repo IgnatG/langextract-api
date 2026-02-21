@@ -79,6 +79,98 @@ Provider = Annotated[
 # ── Extraction configuration model ─────────────────────────
 
 
+class GuardrailsConfig(BaseModel):
+    """Per-request guardrails configuration.
+
+    Controls LLM output validation, retry, and corrective
+    prompting via ``langextract-guardrails``.  When provided
+    in ``extraction_config``, overrides the global
+    ``GUARDRAILS_*`` settings for this request.
+    """
+
+    enabled: bool | None = Field(
+        default=None,
+        description=(
+            "Enable output validation with retry. "
+            "When ``None``, falls back to the global "
+            "``GUARDRAILS_ENABLED`` setting."
+        ),
+    )
+    json_schema: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "JSON Schema dict to validate LLM output against. "
+            "When set, a ``JsonSchemaValidator`` is created "
+            "automatically."
+        ),
+    )
+    regex_pattern: str | None = Field(
+        default=None,
+        description=(
+            "Regex pattern the LLM output must match. "
+            "When set, a ``RegexValidator`` is created."
+        ),
+    )
+    regex_description: str | None = Field(
+        default=None,
+        description=(
+            "Human-readable description of the regex pattern, "
+            "used in corrective error messages."
+        ),
+    )
+    max_retries: int | None = Field(
+        default=None,
+        ge=0,
+        le=10,
+        description=(
+            "Maximum retry attempts on validation failure. "
+            "Overrides ``GUARDRAILS_MAX_RETRIES``."
+        ),
+    )
+    include_output_in_correction: bool | None = Field(
+        default=None,
+        description=(
+            "Include the invalid output in the correction "
+            "prompt.  Set ``False`` for error-only mode to "
+            "save tokens."
+        ),
+    )
+    json_schema_strict: bool = Field(
+        default=True,
+        description=(
+            "When ``True``, additional properties not in "
+            "the schema cause validation failure."
+        ),
+    )
+
+
+class AuditConfig(BaseModel):
+    """Per-request audit configuration.
+
+    Controls structured audit logging via
+    ``langextract-audit``.  When provided in
+    ``extraction_config``, overrides the global
+    ``AUDIT_*`` settings for this request.
+    """
+
+    enabled: bool | None = Field(
+        default=None,
+        description=(
+            "Enable audit logging. When ``None``, falls back "
+            "to the global ``AUDIT_ENABLED`` setting."
+        ),
+    )
+    sample_length: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Store truncated prompt/response samples in audit "
+            "records for debugging.  Overrides "
+            "``AUDIT_SAMPLE_LENGTH``."
+        ),
+    )
+
+
 class ExtractionConfig(BaseModel):
     """Typed extraction configuration overrides.
 
@@ -158,14 +250,38 @@ class ExtractionConfig(BaseModel):
             "prompt-only extraction."
         ),
     )
+    guardrails: GuardrailsConfig | None = Field(
+        default=None,
+        description=(
+            "Output validation and retry configuration via "
+            "langextract-guardrails.  When unset, falls back "
+            "to the global ``GUARDRAILS_*`` settings."
+        ),
+    )
+    audit: AuditConfig | None = Field(
+        default=None,
+        description=(
+            "Audit logging configuration via "
+            "langextract-audit.  When unset, falls back "
+            "to the global ``AUDIT_*`` settings."
+        ),
+    )
 
     def to_flat_dict(self) -> dict[str, Any]:
         """Return a dict with only non-None values.
 
+        Nested models (``guardrails``, ``audit``) are serialized
+        to plain dicts so the result is JSON-serializable and
+        safe for Celery task arguments.
+
         Returns:
             Flat dict suitable for ``run_extraction``.
         """
-        return {k: v for k, v in self.model_dump().items() if v is not None}
+        data: dict[str, Any] = {}
+        for k, v in self.model_dump().items():
+            if v is not None:
+                data[k] = v
+        return data
 
 
 # ── Request models ──────────────────────────────────────────

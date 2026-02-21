@@ -44,6 +44,7 @@ from app.services.extraction_cache import (
     ExtractionCache,
     build_cache_key,
 )
+from app.services.model_wrappers import apply_model_wrappers
 from app.services.provider_manager import ProviderManager
 from app.services.providers import is_openai_model, resolve_api_key
 from app.services.structured_output import (
@@ -349,6 +350,13 @@ def run_extraction(
         response_format=response_format,
     )
 
+    # ── Step 3b: Apply guardrails & audit wrappers ──────────
+    cached_model = apply_model_wrappers(
+        cached_model,
+        provider,
+        extraction_config,
+    )
+
     extract_kwargs: dict[str, Any] = {
         "text_or_documents": text_input,
         "prompt_description": prompt_description,
@@ -623,6 +631,13 @@ async def async_run_extraction(
         manager,
         examples=examples,
         response_format=response_format_async,
+    )
+
+    # ── Step 3b: Apply guardrails & audit wrappers (async) ───
+    cached_model = apply_model_wrappers(
+        cached_model,
+        provider,
+        extraction_config,
     )
 
     extract_kwargs: dict[str, Any] = {

@@ -133,6 +133,18 @@ def extract_document(
                 success=False,
                 duration_s=elapsed_s,
             )
+            # Fire failure webhook so the caller knows extraction
+            # has permanently failed (all retries exhausted).
+            if callback_url:
+                fire_webhook(
+                    callback_url,
+                    {
+                        "task_id": self.request.id,
+                        "status": "failed",
+                        "error": str(exc),
+                    },
+                    extra_headers=callback_headers,
+                )
         logger.exception(
             "Extraction failed (attempt %d/%d) for %s: %s",
             self.request.retries + 1,

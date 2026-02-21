@@ -97,6 +97,20 @@ class Settings(BaseSettings):
     EXTRACTION_CACHE_TTL: int = 86400  # seconds (24 h)
     EXTRACTION_CACHE_BACKEND: str = "redis"  # redis | disk | none
 
+    # ── Audit logging ───────────────────────────────────────────────
+    AUDIT_ENABLED: bool = False
+    AUDIT_SINK: str = "logging"  # logging | jsonfile | otel
+    AUDIT_LOG_PATH: str = "audit.jsonl"
+    AUDIT_SAMPLE_LENGTH: int | None = None
+
+    # ── Guardrails (output validation) ──────────────────────────────
+    GUARDRAILS_ENABLED: bool = False
+    GUARDRAILS_MAX_RETRIES: int = 3
+    GUARDRAILS_MAX_CONCURRENCY: int | None = None
+    GUARDRAILS_INCLUDE_OUTPUT_IN_CORRECTION: bool = True
+    GUARDRAILS_MAX_CORRECTION_PROMPT_LENGTH: int | None = None
+    GUARDRAILS_MAX_CORRECTION_OUTPUT_LENGTH: int | None = None
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _parse_cors(cls, v: str | list[str]) -> list[str]:

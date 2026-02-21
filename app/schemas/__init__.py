@@ -13,9 +13,11 @@ keeps working.
 from app.schemas.enums import TaskState
 from app.schemas.health import CeleryHealthResponse, HealthResponse
 from app.schemas.requests import (
+    AuditConfig,
     BatchExtractionRequest,
     ExtractionConfig,
     ExtractionRequest,
+    GuardrailsConfig,
     Provider,
 )
 from app.schemas.responses import (
@@ -31,6 +33,7 @@ from app.schemas.results import (
 )
 
 __all__ = [
+    "AuditConfig",
     "BatchExtractionRequest",
     "BatchTaskSubmitResponse",
     "CeleryHealthResponse",
@@ -39,6 +42,7 @@ __all__ = [
     "ExtractionMetadata",
     "ExtractionRequest",
     "ExtractionResult",
+    "GuardrailsConfig",
     "HealthResponse",
     "Provider",
     "TaskRevokeResponse",
