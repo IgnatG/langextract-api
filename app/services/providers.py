@@ -24,7 +24,7 @@ def resolve_api_key(provider: str) -> str | None:
     lower = provider.lower()
     if "gpt" in lower or "openai" in lower:
         return settings.OPENAI_API_KEY or None
-    return settings.LANGEXTRACT_API_KEY or settings.GEMINI_API_KEY or None
+    return settings.LANGCORE_API_KEY or settings.GEMINI_API_KEY or None
 
 
 def is_openai_model(provider: str) -> bool:

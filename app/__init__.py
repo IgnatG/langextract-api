@@ -1,1 +1,1 @@
-"""LangExtract API — FastAPI + Celery extraction service."""
+"""LangCore API — FastAPI + Celery extraction service."""

@@ -19,7 +19,7 @@ class TestSettingsDefaults:
     def test_app_name(self):
         """Default app name."""
         s = Settings(_env_file=None, REDIS_HOST="localhost")
-        assert s.APP_NAME == "LangExtract API"
+        assert s.APP_NAME == "LangCore API"
 
     def test_api_prefix(self):
         """Default API prefix."""
@@ -175,7 +175,7 @@ class TestSettingsApiKeys:
         s = Settings(_env_file=None, REDIS_HOST="localhost")
         assert s.OPENAI_API_KEY == ""
         assert s.GEMINI_API_KEY == ""
-        assert s.LANGEXTRACT_API_KEY == ""
+        assert s.LANGCORE_API_KEY == ""
 
     def test_api_keys_from_env(self):
         """API keys can be set via constructor."""
@@ -184,11 +184,11 @@ class TestSettingsApiKeys:
             REDIS_HOST="localhost",
             OPENAI_API_KEY="sk-test",
             GEMINI_API_KEY="gm-test",
-            LANGEXTRACT_API_KEY="lx-test",
+            LANGCORE_API_KEY="lx-test",
         )
         assert s.OPENAI_API_KEY == "sk-test"
         assert s.GEMINI_API_KEY == "gm-test"
-        assert s.LANGEXTRACT_API_KEY == "lx-test"
+        assert s.LANGCORE_API_KEY == "lx-test"
 
 
 class TestGetVersion:

@@ -167,42 +167,42 @@ class CeleryTaskCollector:
             )
 
         c_sub = CounterMetricFamily(
-            "langextract_tasks_submitted",
+            "langcore_tasks_submitted",
             "Total extraction tasks submitted.",
         )
         c_sub.add_metric([], submitted)
         yield c_sub
 
         c_ok = CounterMetricFamily(
-            "langextract_tasks_succeeded",
+            "langcore_tasks_succeeded",
             "Total extraction tasks that succeeded.",
         )
         c_ok.add_metric([], succeeded)
         yield c_ok
 
         c_fail = CounterMetricFamily(
-            "langextract_tasks_failed",
+            "langcore_tasks_failed",
             "Total extraction tasks that failed.",
         )
         c_fail.add_metric([], failed)
         yield c_fail
 
         g_dur = GaugeMetricFamily(
-            "langextract_task_duration_seconds_sum",
+            "langcore_task_duration_seconds_sum",
             "Cumulative task processing time in seconds.",
         )
         g_dur.add_metric([], duration)
         yield g_dur
 
         c_hits = CounterMetricFamily(
-            "langextract_cache_hits",
+            "langcore_cache_hits",
             "Total extraction-cache hits.",
         )
         c_hits.add_metric([], cache_hits)
         yield c_hits
 
         c_miss = CounterMetricFamily(
-            "langextract_cache_misses",
+            "langcore_cache_misses",
             "Total extraction-cache misses.",
         )
         c_miss.add_metric([], cache_misses)

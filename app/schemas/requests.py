@@ -83,7 +83,7 @@ class GuardrailsConfig(BaseModel):
     """Per-request guardrails configuration.
 
     Controls LLM output validation, retry, and corrective
-    prompting via ``langextract-guardrails``.  When provided
+    prompting via ``langcore-guardrails``.  When provided
     in ``extraction_config``, overrides the global
     ``GUARDRAILS_*`` settings for this request.
     """
@@ -148,7 +148,7 @@ class AuditConfig(BaseModel):
     """Per-request audit configuration.
 
     Controls structured audit logging via
-    ``langextract-audit``.  When provided in
+    ``langcore-audit``.  When provided in
     ``extraction_config``, overrides the global
     ``AUDIT_*`` settings for this request.
     """
@@ -254,7 +254,7 @@ class ExtractionConfig(BaseModel):
         default=None,
         description=(
             "Output validation and retry configuration via "
-            "langextract-guardrails.  When unset, falls back "
+            "langcore-guardrails.  When unset, falls back "
             "to the global ``GUARDRAILS_*`` settings."
         ),
     )
@@ -262,7 +262,7 @@ class ExtractionConfig(BaseModel):
         default=None,
         description=(
             "Audit logging configuration via "
-            "langextract-audit.  When unset, falls back "
+            "langcore-audit.  When unset, falls back "
             "to the global ``AUDIT_*`` settings."
         ),
     )
@@ -340,7 +340,7 @@ class ExtractionRequest(BaseModel):
     extraction_config: ExtractionConfig = Field(
         default_factory=ExtractionConfig,
         description=(
-            "Optional LangExtract configuration overrides "
+            "Optional LangCore configuration overrides "
             "(prompt, examples, temperature, etc.)."
         ),
     )

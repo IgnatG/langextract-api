@@ -36,7 +36,7 @@ Copy `.env.example` (if provided) or set the following:
 | `REDIS_DB`              | `0`                  | Redis database index           |
 | `OPENAI_API_KEY`        | `""`                 | OpenAI API key                 |
 | `GEMINI_API_KEY`        | `""`                 | Google Gemini API key          |
-| `LANGEXTRACT_API_KEY`   | `""`                 | LangExtract managed key        |
+| `LANGCORE_API_KEY`   | `""`                 | LangCore managed key        |
 | `DEFAULT_PROVIDER`      | `gpt-4o`             | Default LLM provider           |
 | `ALLOWED_URL_DOMAINS`   | `[]`                 | Comma-separated domain list    |
 | `WEBHOOK_SECRET`        | `""`                 | HMAC secret for webhooks       |

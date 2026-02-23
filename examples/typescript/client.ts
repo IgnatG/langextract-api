@@ -1,5 +1,5 @@
 /**
- * LangExtract API — TypeScript client example.
+ * LangCore API — TypeScript client example.
  *
  * Demonstrates:
  *   1. Submit an extraction from raw text.

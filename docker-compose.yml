@@ -1,5 +1,5 @@
 ---
-# LangExtract API — Docker Compose
+# LangCore API — Docker Compose
 #
 # Services: API (FastAPI), Worker (Celery), Redis (broker/backend), Flower (monitoring)
 #
@@ -8,10 +8,7 @@
 #   Production  : docker compose --profile production up --build -d
 
 x-dev-common: &dev-common
-  build:
-    context: .
-    dockerfile: docker/Dockerfile
-    target: dev
+  image: langcore:dev
   volumes:
     - .:/app
   env_file:
@@ -36,6 +33,10 @@ services:
   # ── FastAPI application ──────────────────────────────────────────────────
   api:
     <<: *dev-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: dev
     ports:
       - "8000:8000"
     environment:
@@ -90,7 +91,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile
       target: production
-    image: langextract:prod
+    image: langcore:prod
     profiles:
       - production
     restart: always
@@ -120,7 +121,7 @@ services:
 
   # ── Production Worker (use --profile production) ─────────────────────────
   worker-prod:
-    image: langextract:prod
+    image: langcore:prod
     profiles:
       - production
     restart: always

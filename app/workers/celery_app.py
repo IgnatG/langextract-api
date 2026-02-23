@@ -24,7 +24,7 @@ setup_logging(
 )
 
 celery_app = Celery(
-    "langextract-worker",
+    "langcore-worker",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
     include=["app.workers.tasks"],

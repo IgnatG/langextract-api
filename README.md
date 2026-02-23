@@ -1,6 +1,6 @@
-# LangExtract API
+# LangCore API
 
-Queue-based document extraction API powered by **FastAPI**, **Celery**, and [**LangExtract**](https://github.com/google/langextract).
+Queue-based document extraction API powered by **FastAPI**, **Celery**, and [**LangCore**](https://github.com/google/langcore).
 
 Submit a document URL or raw text, get back structured entities — asynchronously.
 
@@ -22,7 +22,7 @@ Submit a document URL or raw text, get back structured entities — asynchronous
 
 1. Client submits via `POST /api/v1/extract` (or `/extract/batch`)
 2. FastAPI validates, enqueues a Celery task in Redis, returns a **task ID**
-3. A Celery worker downloads the document text and runs the LangExtract pipeline
+3. A Celery worker downloads the document text and runs the LangCore pipeline
 4. Results are stored in Redis (TTL via `RESULT_EXPIRES`)
 5. Client **polls** `GET /api/v1/tasks/{task_id}` or receives a **webhook** callback
 
@@ -200,7 +200,7 @@ All settings are driven by environment variables (`.env` file supported):
 
 | Variable       | Default         | Description                       |
 |----------------|-----------------|-----------------------------------|
-| `APP_NAME`     | LangExtract API | Display name                      |
+| `APP_NAME`     | LangCore API | Display name                      |
 | `API_V1_STR`   | /api/v1         | API version prefix                |
 | `ROOT_PATH`    | _(empty)_       | ASGI root path (reverse proxy)    |
 | `DEBUG`        | false           | Enable debug mode                 |
@@ -223,13 +223,13 @@ All settings are driven by environment variables (`.env` file supported):
 | Variable                   | Default   | Description                                      |
 |----------------------------|-----------|--------------------------------------------------|
 | `DEFAULT_PROVIDER`         | gpt-4o    | Default model (overridable per-request)          |
-| `DEFAULT_MAX_WORKERS`      | 10        | LangExtract parallel workers                     |
-| `DEFAULT_MAX_CHAR_BUFFER`  | 1000      | LangExtract character buffer                     |
+| `DEFAULT_MAX_WORKERS`      | 10        | LangCore parallel workers                     |
+| `DEFAULT_MAX_CHAR_BUFFER`  | 1000      | LangCore character buffer                     |
 | `OPENAI_API_KEY`           | _(empty)_ | OpenAI key (for GPT models)                      |
 | `GEMINI_API_KEY`           | _(empty)_ | Google Gemini key                                |
 | `ANTHROPIC_API_KEY`        | _(empty)_ | Anthropic key (for Claude models)                |
 | `MISTRAL_API_KEY`          | _(empty)_ | Mistral AI key                                   |
-| `LANGEXTRACT_API_KEY`      | _(empty)_ | Dedicated key (falls back to `GEMINI_API_KEY`)   |
+| `LANGCORE_API_KEY`      | _(empty)_ | Dedicated key (falls back to `GEMINI_API_KEY`)   |
 | `OLLAMA_API_BASE`          | _(empty)_ | Ollama base URL (e.g. `http://localhost:11434`)  |
 | `EXTRACTION_CACHE_ENABLED` | true      | Enable LLM response caching via Redis            |
 | `EXTRACTION_CACHE_TTL`     | 86400     | Cache TTL in seconds (default 24 h)              |
@@ -416,8 +416,8 @@ Enabled automatically via `ProviderManager.ensure_cache()`. Every `litellm.compl
 > **Multi-pass bypass:** When `passes > 1`, only the first pass (pass 0) is
 > served from the LiteLLM cache. Passes ≥ 2 automatically include
 > `cache={"no-cache": True}` so each subsequent pass gets a fresh LLM response.
-> This is handled transparently by the `langextract-litellm` provider via the
-> `pass_num` kwarg that LangExtract threads through the annotation loop.
+> This is handled transparently by the `langcore-litellm` provider via the
+> `pass_num` kwarg that LangCore threads through the annotation loop.
 
 ### Tier 2 — Extraction-Result Cache
 
@@ -452,15 +452,15 @@ When a result is served from the extraction cache, the response metadata include
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `langextract_cache_hits` | counter | Total extraction-cache hits |
-| `langextract_cache_misses` | counter | Total extraction-cache misses |
+| `langcore_cache_hits` | counter | Total extraction-cache hits |
+| `langcore_cache_misses` | counter | Total extraction-cache misses |
 
 ---
 
 ## Project Structure
 
 ```
-langextract-api/
+langcore-api/
 ├── app/
 │   ├── main.py                    # App factory, middleware, lifespan
 │   ├── core/
@@ -476,7 +476,7 @@ langextract-api/
 │   │   ├── converters.py          # Input normalisation helpers
 │   │   ├── downloader.py          # URL fetch with SSRF / content guards
 │   │   ├── extraction_cache.py    # Multi-tier extraction-result cache
-│   │   ├── extractor.py           # LangExtract extraction business logic
+│   │   ├── extractor.py           # LangCore extraction business logic
 │   │   ├── provider_manager.py    # Singleton model cache & LiteLLM Redis setup
 │   │   ├── providers.py           # LLM provider factory
 │   │   ├── structured_output.py   # JSON Schema builder for response_format

@@ -1,5 +1,5 @@
 """
-LangExtract API — Python client example.
+LangCore API — Python client example.
 
 Demonstrates:
   1. Submit an extraction from raw text.

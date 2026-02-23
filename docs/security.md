@@ -1,7 +1,7 @@
 # Security
 
 This document describes the security measures built into the
-LangExtract API.
+LangCore API.
 
 ## SSRF Protection
 
@@ -75,7 +75,7 @@ signature = HMAC-SHA256(secret.encode(), message).hexdigest()
 
 ## API Key Management
 
-API keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `LANGEXTRACT_API_KEY`)
+API keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `LANGCORE_API_KEY`)
 are loaded from environment variables or a `.env` file and never
 logged or returned in API responses.  Worker processes inherit the
 same environment.

@@ -109,7 +109,7 @@ class TestCeleryTaskCollector:
 
         # Counter families
         assert isinstance(families[0], CounterMetricFamily)
-        assert families[0].name == "langextract_tasks_submitted"
+        assert families[0].name == "langcore_tasks_submitted"
         assert families[0].samples[0].value == 10
 
         assert isinstance(families[1], CounterMetricFamily)
@@ -172,10 +172,10 @@ class TestGenerateMetrics:
 
         output = generate_metrics().decode()
 
-        assert "langextract_tasks_submitted_total" in output
-        assert "langextract_tasks_succeeded_total" in output
-        assert "langextract_tasks_failed_total" in output
-        assert "langextract_task_duration_seconds_sum" in output
+        assert "langcore_tasks_submitted_total" in output
+        assert "langcore_tasks_succeeded_total" in output
+        assert "langcore_tasks_failed_total" in output
+        assert "langcore_task_duration_seconds_sum" in output
         assert "# HELP" in output
         assert "# TYPE" in output
 

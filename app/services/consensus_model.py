@@ -18,8 +18,8 @@ import re
 from collections.abc import Iterator, Sequence
 from typing import Any
 
-from langextract.core.base_model import BaseLanguageModel
-from langextract.core.types import ScoredOutput
+from langcore.core.base_model import BaseLanguageModel
+from langcore.core.types import ScoredOutput
 
 logger = logging.getLogger(__name__)
 

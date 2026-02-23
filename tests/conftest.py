@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for the LangExtract API test suite."""
+"""Shared pytest fixtures for the LangCore API test suite."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 def mock_settings():
     """Return a mock Settings object with sensible test defaults."""
     settings = MagicMock()
-    settings.APP_NAME = "LangExtract API"
+    settings.APP_NAME = "LangCore API"
     settings.API_V1_STR = "/api/v1"
     settings.ROOT_PATH = ""
     settings.DEBUG = False
@@ -53,7 +53,7 @@ def mock_settings():
     settings.CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
     settings.OPENAI_API_KEY = "test-openai-key"
     settings.GEMINI_API_KEY = "test-gemini-key"
-    settings.LANGEXTRACT_API_KEY = ""
+    settings.LANGCORE_API_KEY = ""
     settings.DEFAULT_PROVIDER = "gpt-4o"
     settings.DEFAULT_MAX_WORKERS = 10
     settings.DEFAULT_MAX_CHAR_BUFFER = 1000
@@ -70,7 +70,7 @@ def mock_settings():
     return settings
 
 
-# ── LangExtract mock dataclasses ──────────────────────────
+# ── LangCore mock dataclasses ──────────────────────────
 
 
 @dataclass

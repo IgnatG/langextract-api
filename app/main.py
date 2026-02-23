@@ -101,7 +101,7 @@ app = FastAPI(
     title=settings.APP_NAME,
     description=(
         "Queue-based document extraction API powered by "
-        "FastAPI, Celery, and LangExtract."
+        "FastAPI, Celery, and LangCore."
     ),
     version=_version,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",

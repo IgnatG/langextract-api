@@ -1,4 +1,6 @@
 # ── Stage 1: Builder ────────────────────────────────────────────────────────
+# Installs all dependencies.  git + uv live here but are NOT copied into the
+# runtime images, saving ~160 MB.
 FROM python:3.12-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -12,7 +14,7 @@ WORKDIR /build
 # Install uv for fast dependency resolution
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# git is required to fetch the Git-hosted dependencies (langextract*)
+# git is required to fetch the Git-hosted dependencies (langcore*)
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -23,18 +25,27 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 
-# ── Stage 2: Development ───────────────────────────────────────────────────
-FROM builder AS dev
+# ── Stage 1b: Dev builder ──────────────────────────────────────────────────
+# Extends builder with dev-group packages (pytest, ruff, …).
+FROM builder AS dev-builder
 
-ENV UV_PROJECT_ENVIRONMENT=/usr/local
-
-WORKDIR /app
-
-# Install ALL deps (including dev group: pytest, ruff) into /usr/local
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --all-groups
+
+
+# ── Stage 2: Development ───────────────────────────────────────────────────
+# Clean runtime — no git, no uv, just Python + installed packages.
+FROM python:3.12-slim AS dev
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Copy ALL installed packages (prod + dev) from dev-builder
+COPY --from=dev-builder /usr/local /usr/local
 
 # Create non-root user for dev (matches production)
 RUN addgroup --system appgroup && \

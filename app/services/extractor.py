@@ -2,7 +2,7 @@
 Extraction orchestrator — coordinates download, LLM, and formatting.
 
 Delegates provider resolution to ``app.services.providers`` and
-data conversion to ``app.services.converters``.  All LangExtract
+data conversion to ``app.services.converters``.  All LangCore
 interaction is isolated here so it can be unit-tested without
 Celery and reused from both the single-document and batch task
 flows.
@@ -15,8 +15,8 @@ import logging
 import time
 from typing import Any
 
-import langextract as lx
-from langextract.core.base_model import BaseLanguageModel
+import langcore as lx
+from langcore.core.base_model import BaseLanguageModel
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -202,7 +202,7 @@ def run_extraction(
 ) -> dict[str, Any]:
     """Core extraction logic shared by single and batch tasks.
 
-    Delegates to ``langextract.extract()`` for the heavy lifting.
+    Delegates to ``langcore.extract()`` for the heavy lifting.
 
     Args:
         task_self: Bound Celery task instance (for progress
@@ -212,7 +212,7 @@ def run_extraction(
         provider: LLM model ID (e.g. ``gpt-4o``).
         passes: Number of extraction passes.
         extraction_config: Optional overrides for prompt,
-            examples, and LangExtract parameters.
+            examples, and LangCore parameters.
 
     Returns:
         A dict containing the extraction result and metadata.
@@ -372,7 +372,7 @@ def run_extraction(
             settings.DEFAULT_MAX_CHAR_BUFFER,
         ),
         "show_progress": False,
-        # Model is pre-configured; suppress the langextract
+        # Model is pre-configured; suppress the langcore
         # UserWarning that fires when model + use_schema_constraints
         # (which defaults to True) are passed together.
         "use_schema_constraints": False,
@@ -388,7 +388,7 @@ def run_extraction(
             "context_window_chars"
         ]
 
-    # ── Step 4: Run LangExtract ─────────────────────────────
+    # ── Step 4: Run LangCore ─────────────────────────────
     logger.info(
         "Calling lx.extract() for %s (model=%s, passes=%d)",
         source,
@@ -491,7 +491,7 @@ async def async_run_extraction(
     """Async extraction logic using ``lx.async_extract()``.
 
     Mirrors ``run_extraction`` but awaits the native async
-    LangExtract path, enabling I/O-CPU overlap for 20-40%
+    LangCore path, enabling I/O-CPU overlap for 20-40%
     wall-time improvement when providers support native
     ``async_infer`` (e.g. LiteLLM via ``litellm.acompletion``).
 
@@ -503,7 +503,7 @@ async def async_run_extraction(
         provider: LLM model ID (e.g. ``gpt-4o``).
         passes: Number of extraction passes.
         extraction_config: Optional overrides for prompt,
-            examples, and LangExtract parameters.
+            examples, and LangCore parameters.
 
     Returns:
         A dict containing the extraction result and metadata.
@@ -655,7 +655,7 @@ async def async_run_extraction(
             settings.DEFAULT_MAX_CHAR_BUFFER,
         ),
         "show_progress": False,
-        # Model is pre-configured; suppress the langextract
+        # Model is pre-configured; suppress the langcore
         # UserWarning that fires when model + use_schema_constraints
         # (which defaults to True) are passed together.
         "use_schema_constraints": False,
@@ -670,7 +670,7 @@ async def async_run_extraction(
             "context_window_chars"
         ]
 
-    # ── Step 4: Run LangExtract (async) ─────────────────────
+    # ── Step 4: Run LangCore (async) ─────────────────────
     logger.info(
         "Calling lx.async_extract() for %s (model=%s, passes=%d)",
         source,

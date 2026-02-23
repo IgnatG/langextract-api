@@ -32,7 +32,7 @@ def get_version() -> str:
         Semantic version string.
     """
     try:
-        return importlib.metadata.version("langextract-api")
+        return importlib.metadata.version("langcore-api")
     except importlib.metadata.PackageNotFoundError:
         return "0.0.0-dev"
 
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     )
 
     # General
-    APP_NAME: str = "LangExtract API"
+    APP_NAME: str = "LangCore API"
     API_V1_STR: str = "/api/v1"
     ROOT_PATH: str = ""
     DEBUG: bool = False
@@ -69,12 +69,12 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     MISTRAL_API_KEY: str = ""
-    LANGEXTRACT_API_KEY: str = ""
+    LANGCORE_API_KEY: str = ""
 
     # Provider / model defaults (overridable per-request)
     DEFAULT_PROVIDER: str = "gpt-4o"
 
-    # LangExtract extraction defaults
+    # LangCore extraction defaults
     DEFAULT_MAX_WORKERS: int = 10
     DEFAULT_MAX_CHAR_BUFFER: int = 1000
 

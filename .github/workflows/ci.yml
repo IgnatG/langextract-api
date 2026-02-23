@@ -102,7 +102,7 @@ jobs:
           file: docker/Dockerfile
           target: dev
           push: false
-          tags: langextract:dev-${{ github.sha }}
+          tags: langcore:dev-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -113,6 +113,6 @@ jobs:
           file: docker/Dockerfile
           target: production
           push: false
-          tags: langextract:prod-${{ github.sha }}
+          tags: langcore:prod-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

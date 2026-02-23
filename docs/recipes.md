@@ -1,6 +1,6 @@
 # Recipes
 
-Common patterns and usage examples for the LangExtract API.
+Common patterns and usage examples for the LangCore API.
 
 ## Single Document Extraction
 
@@ -103,7 +103,7 @@ Early stopping kicks in automatically when consecutive passes yield identical re
 > **Cache interaction:** The first pass may be served from the LiteLLM Redis
 > cache (fast, zero cost). Passes ≥ 2 **always bypass** the LLM response cache
 > so that each subsequent pass produces a genuinely independent extraction. This
-> is handled automatically by the `langextract-litellm` provider.
+> is handled automatically by the `langcore-litellm` provider.
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/extract \

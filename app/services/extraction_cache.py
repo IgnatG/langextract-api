@@ -3,7 +3,7 @@ Multi-tier extraction-result cache.
 
 Provides an ``ExtractionCache`` that sits **above** the LLM call
 layer and caches complete extraction results (entity lists +
-metadata).  A cache hit skips the entire LangExtract pipeline,
+metadata).  A cache hit skips the entire LangCore pipeline,
 returning pre-computed results in < 500 ms with zero API cost.
 
 **Cache key composition**

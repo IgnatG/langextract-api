@@ -1,7 +1,7 @@
 """
-Data conversion helpers for LangExtract results.
+Data conversion helpers for LangCore results.
 
-Converts between LangExtract's internal data structures and
+Converts between LangCore's internal data structures and
 the API's Pydantic-friendly dict format.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import langextract as lx
+import langcore as lx
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ def convert_extractions(
 def extract_token_usage(
     lx_result: lx.data.AnnotatedDocument,
 ) -> int | None:
-    """Attempt to extract token usage from a LangExtract result.
+    """Attempt to extract token usage from a LangCore result.
 
     Args:
         lx_result: The annotated document from ``lx.extract()``.

@@ -1,4 +1,4 @@
-// LangExtract API — Go client example.
+// LangCore API — Go client example.
 //
 // Demonstrates:
 //   1. Submit an extraction from raw text.
@@ -46,7 +46,7 @@ func apiBase() string {
 // Types
 // ---------------------------------------------------------------------------
 
-// ExtractionConfig holds optional LangExtract pipeline overrides.
+// ExtractionConfig holds optional LangCore pipeline overrides.
 type ExtractionConfig struct {
 	PromptDescription string  `json:"prompt_description,omitempty"`
 	Temperature       float64 `json:"temperature,omitempty"`

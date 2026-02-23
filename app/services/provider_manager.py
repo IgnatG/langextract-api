@@ -20,8 +20,8 @@ import threading
 from typing import Any
 
 import litellm
-from langextract import factory
-from langextract.core.base_model import BaseLanguageModel
+from langcore import factory
+from langcore.core.base_model import BaseLanguageModel
 
 from app.core.config import get_settings
 

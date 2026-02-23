@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------
-# Unified entrypoint for the LangExtract API container.
+# Unified entrypoint for the LangCore API container.
 #
 # The container role is selected via the APP_ROLE environment variable:
 #   web     — starts the FastAPI application via Uvicorn
@@ -16,7 +16,7 @@ set -euo pipefail
 APP_ROLE="${APP_ROLE:-web}"
 LOG_LEVEL="${LOG_LEVEL:-info}"
 
-echo "Starting LangExtract container in '${APP_ROLE}' mode …"
+echo "Starting LangCore container in '${APP_ROLE}' mode …"
 
 case "${APP_ROLE}" in
 

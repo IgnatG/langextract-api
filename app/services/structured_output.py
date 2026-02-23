@@ -1,11 +1,11 @@
 """
 Structured output helpers for LiteLLM ``response_format``.
 
-Generates a JSON Schema from LangExtract examples and provides
+Generates a JSON Schema from LangCore examples and provides
 capability detection so that the extraction orchestrator can
 enable schema-constrained output for providers that support it.
 
-The generated schema matches the format that LangExtract's
+The generated schema matches the format that LangCore's
 resolver expects: a top-level ``extractions`` array where each
 item uses dynamic keys (the extraction class name for the text
 and ``<class>_attributes`` for the associated attributes).
@@ -36,11 +36,11 @@ import litellm
 logger = logging.getLogger(__name__)
 
 # Suffix appended to an extraction class name to form the
-# attributes key (must match ``langextract.core.data.ATTRIBUTE_SUFFIX``).
+# attributes key (must match ``langcore.core.data.ATTRIBUTE_SUFFIX``).
 _ATTRIBUTE_SUFFIX: str = "_attributes"
 
 # Wrapper key for the top-level array
-# (must match ``langextract.core.data.EXTRACTIONS_KEY``).
+# (must match ``langcore.core.data.EXTRACTIONS_KEY``).
 _EXTRACTIONS_KEY: str = "extractions"
 
 
@@ -95,7 +95,7 @@ def build_response_format(
     """Build a ``response_format`` dict for ``litellm.completion()``.
 
     Generates a JSON Schema (non-strict) from the provided
-    LangExtract examples.  The schema describes the expected
+    LangCore examples.  The schema describes the expected
     output structure so that cloud providers constrain the
     LLM's output to valid JSON matching the extraction format.
 
@@ -104,7 +104,7 @@ def build_response_format(
     is returned.
 
     Args:
-        raw_examples: LangExtract example dicts (each with
+        raw_examples: LangCore example dicts (each with
             ``text`` and ``extractions`` keys).
 
     Returns:

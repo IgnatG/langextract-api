@@ -7,8 +7,8 @@ from typing import Any
 from unittest import mock
 
 import pytest
-from langextract.core.base_model import BaseLanguageModel
-from langextract.core.types import ScoredOutput
+from langcore.core.base_model import BaseLanguageModel
+from langcore.core.types import ScoredOutput
 
 from app.services.model_wrappers import (
     _build_audit_sinks,
@@ -78,7 +78,7 @@ class TestBuildAuditSinks:
 
     def test_default_logging_sink(self, _default_settings):
         """Default sink type is LoggingSink."""
-        from langextract_audit import LoggingSink
+        from langcore_audit import LoggingSink
 
         sinks = _build_audit_sinks(_default_settings)
 
@@ -87,7 +87,7 @@ class TestBuildAuditSinks:
 
     def test_jsonfile_sink(self, _default_settings):
         """JsonFileSink when AUDIT_SINK=jsonfile."""
-        from langextract_audit import JsonFileSink
+        from langcore_audit import JsonFileSink
 
         _default_settings.AUDIT_SINK = "jsonfile"
         _default_settings.AUDIT_LOG_PATH = "/tmp/test_audit.jsonl"
@@ -99,7 +99,7 @@ class TestBuildAuditSinks:
 
     def test_unknown_sink_falls_back_to_logging(self, _default_settings):
         """Unknown sink type falls back to LoggingSink."""
-        from langextract_audit import LoggingSink
+        from langcore_audit import LoggingSink
 
         _default_settings.AUDIT_SINK = "nonexistent"
 
@@ -117,7 +117,7 @@ class TestBuildValidators:
 
     def test_json_schema_validator(self):
         """A json_schema key produces a JsonSchemaValidator."""
-        from langextract_guardrails import JsonSchemaValidator
+        from langcore_guardrails import JsonSchemaValidator
 
         config = {
             "json_schema": {
@@ -133,7 +133,7 @@ class TestBuildValidators:
 
     def test_regex_validator(self):
         """A regex_pattern key produces a RegexValidator."""
-        from langextract_guardrails import RegexValidator
+        from langcore_guardrails import RegexValidator
 
         config = {
             "regex_pattern": r"\d{4}-\d{2}-\d{2}",
@@ -156,7 +156,7 @@ class TestBuildValidators:
 
     def test_empty_config_falls_back_to_syntax_only(self):
         """Empty config produces a syntax-only JsonSchemaValidator."""
-        from langextract_guardrails import JsonSchemaValidator
+        from langcore_guardrails import JsonSchemaValidator
 
         validators = _build_validators({})
 
@@ -199,7 +199,7 @@ class TestWrapWithGuardrails:
 
     def test_enabled_wraps_model(self, _default_settings):
         """When enabled, the model is wrapped with GuardrailLanguageModel."""
-        from langextract_guardrails import GuardrailLanguageModel
+        from langcore_guardrails import GuardrailLanguageModel
 
         _default_settings.GUARDRAILS_ENABLED = True
         model = FakeModel()
@@ -211,7 +211,7 @@ class TestWrapWithGuardrails:
 
     def test_per_request_override_enables(self, _default_settings):
         """Per-request enabled=True wins over global disabled."""
-        from langextract_guardrails import GuardrailLanguageModel
+        from langcore_guardrails import GuardrailLanguageModel
 
         _default_settings.GUARDRAILS_ENABLED = False
         model = FakeModel()
@@ -226,7 +226,7 @@ class TestWrapWithGuardrails:
 
     def test_custom_max_retries(self, _default_settings):
         """Per-request max_retries overrides global setting."""
-        from langextract_guardrails import GuardrailLanguageModel
+        from langcore_guardrails import GuardrailLanguageModel
 
         _default_settings.GUARDRAILS_ENABLED = True
         model = FakeModel()
@@ -242,7 +242,7 @@ class TestWrapWithGuardrails:
 
     def test_model_id_prefix(self, _default_settings):
         """Wrapped model_id is prefixed with 'guardrails/'."""
-        from langextract_guardrails import GuardrailLanguageModel
+        from langcore_guardrails import GuardrailLanguageModel
 
         _default_settings.GUARDRAILS_ENABLED = True
         model = FakeModel()
@@ -291,7 +291,7 @@ class TestWrapWithAudit:
 
     def test_enabled_wraps_model(self, _default_settings):
         """When enabled, the model is wrapped with AuditLanguageModel."""
-        from langextract_audit import AuditLanguageModel
+        from langcore_audit import AuditLanguageModel
 
         _default_settings.AUDIT_ENABLED = True
         model = FakeModel()
@@ -303,7 +303,7 @@ class TestWrapWithAudit:
 
     def test_per_request_override_enables(self, _default_settings):
         """Per-request enabled=True wins over global disabled."""
-        from langextract_audit import AuditLanguageModel
+        from langcore_audit import AuditLanguageModel
 
         _default_settings.AUDIT_ENABLED = False
         model = FakeModel()
@@ -318,7 +318,7 @@ class TestWrapWithAudit:
 
     def test_sample_length_from_config(self, _default_settings):
         """Per-request sample_length is applied."""
-        from langextract_audit import AuditLanguageModel
+        from langcore_audit import AuditLanguageModel
 
         _default_settings.AUDIT_ENABLED = True
         model = FakeModel()
@@ -333,7 +333,7 @@ class TestWrapWithAudit:
 
     def test_model_id_prefix(self, _default_settings):
         """Wrapped model_id is prefixed with 'audit/'."""
-        from langextract_audit import AuditLanguageModel
+        from langcore_audit import AuditLanguageModel
 
         _default_settings.AUDIT_ENABLED = True
         model = FakeModel()
@@ -362,8 +362,8 @@ class TestApplyModelWrappers:
 
     def test_both_wrappers_applied(self, _default_settings):
         """When both are enabled, model is double-wrapped."""
-        from langextract_audit import AuditLanguageModel
-        from langextract_guardrails import GuardrailLanguageModel
+        from langcore_audit import AuditLanguageModel
+        from langcore_guardrails import GuardrailLanguageModel
 
         _default_settings.AUDIT_ENABLED = True
         _default_settings.GUARDRAILS_ENABLED = True
@@ -380,7 +380,7 @@ class TestApplyModelWrappers:
 
     def test_guardrails_only(self, _default_settings):
         """Only guardrails enabled, audit disabled."""
-        from langextract_guardrails import GuardrailLanguageModel
+        from langcore_guardrails import GuardrailLanguageModel
 
         _default_settings.GUARDRAILS_ENABLED = True
         _default_settings.AUDIT_ENABLED = False
@@ -393,7 +393,7 @@ class TestApplyModelWrappers:
 
     def test_audit_only(self, _default_settings):
         """Only audit enabled, guardrails disabled."""
-        from langextract_audit import AuditLanguageModel
+        from langcore_audit import AuditLanguageModel
 
         _default_settings.AUDIT_ENABLED = True
         _default_settings.GUARDRAILS_ENABLED = False
@@ -406,8 +406,8 @@ class TestApplyModelWrappers:
 
     def test_per_request_config_overrides(self, _default_settings):
         """Per-request config overrides global settings."""
-        from langextract_audit import AuditLanguageModel
-        from langextract_guardrails import GuardrailLanguageModel
+        from langcore_audit import AuditLanguageModel
+        from langcore_guardrails import GuardrailLanguageModel
 
         _default_settings.AUDIT_ENABLED = False
         _default_settings.GUARDRAILS_ENABLED = False

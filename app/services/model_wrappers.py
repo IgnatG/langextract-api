@@ -2,7 +2,7 @@
 Model wrapper utilities for audit logging and guardrails.
 
 Provides factory functions that decorate a ``BaseLanguageModel``
-with ``langextract-audit`` and/or ``langextract-guardrails``
+with ``langcore-audit`` and/or ``langcore-guardrails``
 providers based on application settings and per-request
 configuration.
 
@@ -19,14 +19,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from langextract.core.base_model import BaseLanguageModel
-from langextract_audit import (
+from langcore.core.base_model import BaseLanguageModel
+from langcore_audit import (
     AuditLanguageModel,
     AuditSink,
     JsonFileSink,
     LoggingSink,
 )
-from langextract_guardrails import (
+from langcore_guardrails import (
     GuardrailLanguageModel,
     GuardrailValidator,
     JsonSchemaValidator,
@@ -64,7 +64,7 @@ def _build_audit_sinks(settings: Settings) -> list[AuditSink]:
 
     if sink_type == "otel":
         try:
-            from langextract_audit.sinks import OtelSpanSink
+            from langcore_audit.sinks import OtelSpanSink
 
             logger.info("Audit sink: OtelSpanSink")
             return [OtelSpanSink()]

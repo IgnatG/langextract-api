@@ -11,8 +11,8 @@ from collections.abc import Iterator, Sequence
 from typing import Any
 
 import pytest
-from langextract.core.base_model import BaseLanguageModel
-from langextract.core.types import ScoredOutput
+from langcore.core.base_model import BaseLanguageModel
+from langcore.core.types import ScoredOutput
 
 from app.services.consensus_model import (
     ConsensusLanguageModel,

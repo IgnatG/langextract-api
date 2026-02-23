@@ -1,4 +1,4 @@
-"""Tests for the LangExtract API endpoints."""
+"""Tests for the LangCore API endpoints."""
 
 from unittest.mock import MagicMock, patch
 

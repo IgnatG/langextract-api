@@ -1,5 +1,5 @@
 """
-Default LangExtract configuration for contract entity extraction.
+Default LangCore configuration for contract entity extraction.
 
 These defaults are used when the caller does not supply their own
 ``prompt_description`` or ``examples`` inside ``extraction_config``.

@@ -1,7 +1,7 @@
 """Tests for structured output helpers.
 
 Validates:
-- JSON Schema generation from LangExtract examples
+- JSON Schema generation from LangCore examples
 - Extraction class collection
 - Provider capability detection
 - Edge cases (empty examples, missing attributes)

@@ -122,14 +122,14 @@ class TestResolveApiKey:
             assert resolve_api_key("GPT-4-turbo") == "test-openai-key"
             assert resolve_api_key("openai/gpt-4o") == "test-openai-key"
 
-    def test_returns_langextract_key_for_gemini(
+    def test_returns_langcore_key_for_gemini(
         self,
         mock_settings,
     ):
-        """Gemini models prefer LANGEXTRACT_API_KEY."""
+        """Gemini models prefer LANGCORE_API_KEY."""
         from app.services.providers import resolve_api_key
 
-        mock_settings.LANGEXTRACT_API_KEY = "lx-key"
+        mock_settings.LANGCORE_API_KEY = "lx-key"
         with patch(
             "app.services.providers.get_settings",
             return_value=mock_settings,
@@ -140,10 +140,10 @@ class TestResolveApiKey:
         self,
         mock_settings,
     ):
-        """If no LANGEXTRACT_API_KEY, fall back to GEMINI."""
+        """If no LANGCORE_API_KEY, fall back to GEMINI."""
         from app.services.providers import resolve_api_key
 
-        mock_settings.LANGEXTRACT_API_KEY = ""
+        mock_settings.LANGCORE_API_KEY = ""
         with patch(
             "app.services.providers.get_settings",
             return_value=mock_settings,
@@ -157,7 +157,7 @@ class TestResolveApiKey:
         """If no keys configured, return None."""
         from app.services.providers import resolve_api_key
 
-        mock_settings.LANGEXTRACT_API_KEY = ""
+        mock_settings.LANGCORE_API_KEY = ""
         mock_settings.GEMINI_API_KEY = ""
         mock_settings.OPENAI_API_KEY = ""
         with patch(
