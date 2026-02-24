@@ -27,7 +27,7 @@ celery_app = Celery(
     "langcore-worker",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["app.workers.tasks"],
+    include=["app.workers.extract_task", "app.workers.batch_task"],
 )
 
 celery_app.conf.update(

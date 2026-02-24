@@ -162,7 +162,6 @@ def _build_model(
 def _run_lx_extract_with_retry(
     extract_kwargs: dict[str, Any],
     source: str,
-    max_retries: int,
 ) -> Any:
     """Call ``lx.extract()`` with automatic retries on ValueError.
 
@@ -171,14 +170,12 @@ def _run_lx_extract_with_retry(
     the output is non-deterministic, an immediate re-invocation
     usually succeeds.
 
-    Retries are handled by ``tenacity``; the ``max_retries``
-    parameter is kept for backward compatibility but the actual
-    attempt count is governed by ``MAX_LLM_RETRIES``.
+    Retries are handled by ``tenacity`` with up to
+    ``MAX_LLM_RETRIES`` attempts.
 
     Args:
         extract_kwargs: Keyword arguments for ``lx.extract()``.
         source: Human-readable source label for logs.
-        max_retries: Kept for API compatibility (unused).
 
     Returns:
         The result of ``lx.extract()``.
@@ -399,7 +396,6 @@ def run_extraction(
     lx_result = _run_lx_extract_with_retry(
         extract_kwargs,
         source,
-        MAX_LLM_RETRIES,
     )
 
     if isinstance(lx_result, list):
@@ -459,17 +455,18 @@ def run_extraction(
 async def _run_lx_async_extract_with_retry(
     extract_kwargs: dict[str, Any],
     source: str,
-    max_retries: int,
 ) -> Any:
     """Call ``lx.async_extract()`` with automatic retries on ValueError.
 
     Mirrors ``_run_lx_extract_with_retry`` but uses the async
     extraction path for I/O-CPU overlap.
 
+    Retries are handled by ``tenacity`` with up to
+    ``MAX_LLM_RETRIES`` attempts.
+
     Args:
         extract_kwargs: Keyword arguments for ``lx.async_extract()``.
         source: Human-readable source label for logs.
-        max_retries: Kept for API compatibility (unused).
 
     Returns:
         The result of ``lx.async_extract()``.
@@ -681,7 +678,6 @@ async def async_run_extraction(
     lx_result = await _run_lx_async_extract_with_retry(
         extract_kwargs,
         source,
-        MAX_LLM_RETRIES,
     )
 
     if isinstance(lx_result, list):

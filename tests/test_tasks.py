@@ -782,7 +782,7 @@ class TestExtractDocumentTask:
 
     def test_calls_run_extraction(self, mock_settings):
         """The task delegates to run_extraction."""
-        from app.workers.tasks import extract_document
+        from app.workers.extract_task import extract_document
 
         mock_result = {
             "status": "completed",
@@ -811,7 +811,7 @@ class TestExtractDocumentTask:
         mock_settings,
     ):
         """Webhook triggered when callback_url is provided."""
-        from app.workers.tasks import extract_document
+        from app.workers.extract_task import extract_document
 
         mock_result = {
             "status": "completed",
@@ -843,7 +843,7 @@ class TestExtractDocumentTask:
 
     def test_retries_on_failure(self, mock_settings):
         """The task retries on exception."""
-        from app.workers.tasks import extract_document
+        from app.workers.extract_task import extract_document
 
         extract_document.push_request(id="task-id-789")
         try:
@@ -866,7 +866,7 @@ class TestExtractDocumentTask:
         mock_settings,
     ):
         """Metric failure is NOT recorded when retries remain."""
-        from app.workers.tasks import extract_document
+        from app.workers.extract_task import extract_document
 
         extract_document.push_request(
             id="task-retry-1",
@@ -895,7 +895,7 @@ class TestExtractDocumentTask:
         mock_settings,
     ):
         """Metric failure IS recorded when retries exhausted."""
-        from app.workers.tasks import extract_document
+        from app.workers.extract_task import extract_document
 
         extract_document.push_request(
             id="task-final-1",
@@ -922,7 +922,7 @@ class TestExtractDocumentTask:
 
     def test_stores_result_in_redis(self, mock_settings):
         """Successful extraction stores result under Redis key."""
-        from app.workers.tasks import extract_document
+        from app.workers.extract_task import extract_document
 
         mock_result = {
             "status": "completed",
@@ -955,7 +955,7 @@ class TestExtractDocumentTask:
         mock_settings,
     ):
         """callback_headers are forwarded to fire_webhook."""
-        from app.workers.tasks import extract_document
+        from app.workers.extract_task import extract_document
 
         mock_result = {
             "status": "completed",
@@ -1031,7 +1031,7 @@ class TestFinalizeBatchTask:
         mock_settings,
     ):
         """All children succeed → full aggregated result."""
-        from app.workers.tasks import finalize_batch
+        from app.workers.batch_task import finalize_batch
 
         ok = {
             "status": "completed",
@@ -1085,7 +1085,7 @@ class TestFinalizeBatchTask:
         mock_settings,
     ):
         """Failed children are captured in errors list."""
-        from app.workers.tasks import finalize_batch
+        from app.workers.batch_task import finalize_batch
 
         ok = {
             "status": "completed",
@@ -1131,7 +1131,7 @@ class TestFinalizeBatchTask:
 
     def test_fires_batch_webhook(self, mock_settings):
         """Batch-level webhook is triggered on completion."""
-        from app.workers.tasks import finalize_batch
+        from app.workers.batch_task import finalize_batch
 
         ok = {
             "status": "completed",
@@ -1171,7 +1171,7 @@ class TestFinalizeBatchTask:
         mock_settings,
     ):
         """Batch result includes per-document child task IDs."""
-        from app.workers.tasks import finalize_batch
+        from app.workers.batch_task import finalize_batch
 
         ok = {
             "status": "completed",
@@ -1215,7 +1215,7 @@ class TestFinalizeBatchTask:
         """Task retries itself when children are not ready."""
         from celery.exceptions import Retry
 
-        from app.workers.tasks import finalize_batch
+        from app.workers.batch_task import finalize_batch
 
         pending = MagicMock()
         pending.id = "child-0"
@@ -1265,7 +1265,6 @@ class TestLxExtractRetry:
             result = _run_lx_extract_with_retry(
                 {"text_or_documents": "hi"},
                 "<test>",
-                2,
             )
 
         assert result is expected
@@ -1287,13 +1286,12 @@ class TestLxExtractRetry:
             result = _run_lx_extract_with_retry(
                 {"text_or_documents": "hi"},
                 "<test>",
-                2,
             )
 
         assert result is expected
 
     def test_raises_after_all_retries_exhausted(self):
-        """Re-raises ValueError after max_retries + 1 attempts."""
+        """Re-raises ValueError after all retry attempts exhausted."""
         from app.services.extractor import (
             _run_lx_extract_with_retry,
         )
@@ -1308,7 +1306,6 @@ class TestLxExtractRetry:
             _run_lx_extract_with_retry(
                 {"text_or_documents": "hi"},
                 "<test>",
-                2,
             )
 
     def test_non_value_error_not_retried(self):
@@ -1327,5 +1324,4 @@ class TestLxExtractRetry:
             _run_lx_extract_with_retry(
                 {"text_or_documents": "hi"},
                 "<test>",
-                2,
             )
