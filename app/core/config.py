@@ -84,7 +84,8 @@ class Settings(BaseSettings):
     RESULT_EXPIRES: int = 86400  # seconds
 
     # ── Security / SSRF ─────────────────────────────────────────────
-    ALLOWED_URL_DOMAINS: list[str] = []
+    ALLOWED_URL_DOMAINS: str = ""
+    SSRF_EXEMPT_HOSTNAMES: str = ""
     WEBHOOK_SECRET: str = ""
     DOC_DOWNLOAD_TIMEOUT: int = 30  # seconds
     DOC_DOWNLOAD_MAX_BYTES: int = 50_000_000  # 50 MB
@@ -142,18 +143,23 @@ class Settings(BaseSettings):
             return json.loads(v)
         return v
 
-    @field_validator("ALLOWED_URL_DOMAINS", mode="before")
-    @classmethod
-    def _parse_allowed_domains(
-        cls,
-        v: str | list[str],
-    ) -> list[str]:
-        """Accept comma-separated string or a list."""
-        if isinstance(v, str):
-            if not v.strip():
-                return []
-            return [d.strip() for d in v.split(",") if d.strip()]
-        return v
+    @property
+    def allowed_url_domains_list(self) -> list[str]:
+        """Parse ALLOWED_URL_DOMAINS comma-separated string into a list."""
+        if not self.ALLOWED_URL_DOMAINS.strip():
+            return []
+        return [d.strip() for d in self.ALLOWED_URL_DOMAINS.split(",") if d.strip()]
+
+    @property
+    def ssrf_exempt_hostnames_list(self) -> list[str]:
+        """Parse SSRF_EXEMPT_HOSTNAMES comma-separated string into a list."""
+        if not self.SSRF_EXEMPT_HOSTNAMES.strip():
+            return []
+        return [
+            h.strip().lower()
+            for h in self.SSRF_EXEMPT_HOSTNAMES.split(",")
+            if h.strip()
+        ]
 
     # Derived URLs
     @property

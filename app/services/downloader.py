@@ -145,7 +145,6 @@ def _looks_like_text(data: bytes) -> bool:
 
 
 def _ssrf_safe_redirect_handler(
-    request: httpx.Request,
     response: httpx.Response,
 ) -> None:
     """Validate each redirect target against SSRF rules.
@@ -157,7 +156,6 @@ def _ssrf_safe_redirect_handler(
     URL that httpx will follow.
 
     Args:
-        request: The outgoing request that produced *response*.
         response: The HTTP response (may be a 3xx redirect).
 
     Raises:

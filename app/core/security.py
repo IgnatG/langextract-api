@@ -181,12 +181,15 @@ def validate_url(
         raise ValueError(f"Cannot extract hostname from {purpose} URL.")
 
     # ── 3. Blocked hostnames ───────────────────────────────────
-    if hostname.lower() in _BLOCKED_HOSTNAMES:
-        raise ValueError(f"'{hostname}' is not allowed for {purpose}.")
+    # Check if hostname is in the SSRF-exempt list first
+    settings = get_settings()
+    exempt = frozenset(settings.ssrf_exempt_hostnames_list)
+    if hostname.lower() not in exempt:
+        if hostname.lower() in _BLOCKED_HOSTNAMES:
+            raise ValueError(f"'{hostname}' is not allowed for {purpose}.")
 
     # ── 4. Domain allow-list (with subdomain matching) ─────────
-    settings = get_settings()
-    allowed = settings.ALLOWED_URL_DOMAINS
+    allowed = settings.allowed_url_domains_list
     if allowed and not any(
         hostname == d or hostname.endswith("." + d) for d in allowed
     ):
@@ -195,7 +198,7 @@ def validate_url(
         )
 
     # ── 5. SSRF protection — resolve and check IPs ─────────────
-    if _is_private_ip(hostname):
+    if hostname.lower() not in exempt and _is_private_ip(hostname):
         raise ValueError(
             f"URL for {purpose} resolves to a private/reserved IP address."
         )
